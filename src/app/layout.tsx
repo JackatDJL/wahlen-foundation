@@ -18,19 +18,22 @@ import { dark } from "@clerk/themes";
 
 // Implement Metadata Images TODO
 export const metadata: Metadata = {
-  title: "The Presentation Foundation - by DJL",
+  title: "The Wahlen Foundation - by DJL",
   description:
-    "A Platform to host your Presentations on without the hasstle of logging in and hosting your files on a Cloud Service.",
+    "Experience the future of elections – innovative, secure, and intuitive. The Wahlen Foundation revolutionizes your voting process with cutting-edge technology and a seamless user experience.",
   icons: [{ rel: "icon", url: "/favicon.ico" }],
   generator: "Next.js",
-  applicationName: "The Presentation Foundation",
+  applicationName: "The Wahlen Foundation",
   referrer: "origin-when-cross-origin",
   keywords: [
-    "presentation",
-    "foundation",
-    "djl",
-    "uploadthing",
-    "cloud storage",
+    "elections",
+    "voting platform",
+    "digital voting",
+    "innovation",
+    "DJL",
+    "revolutionary",
+    "secure",
+    "intuitive",
   ],
   authors: [{ name: "Jack Ruder", url: "https://jack.djl.foundation" }],
   creator: "JackatDJL",
@@ -41,19 +44,19 @@ export const metadata: Metadata = {
     telephone: false,
   },
   openGraph: {
-    title: "The Presentation Foundation - by DJL",
+    title: "The Wahlen Foundation - by DJL",
     description:
-      "A Platform to host your Presentations on without the hasstle of logging in and hosting your files on a Cloud Service.",
-    url: "https://presentation.djl.foundation",
+      "Experience a revolutionary election platform that empowers you with modern, secure, and intuitive voting. Transform your election process with The Wahlen Foundation.",
+    url: "https://wahlen.djl.foundation",
     type: "website",
     locale: "en_US",
-    siteName: "The Presentation Foundation",
+    siteName: "The Wahlen Foundation",
     images: [
       {
         url: "/img/og.png",
         width: 1200,
         height: 630,
-        alt: "The Presentation Foundation - by DJL",
+        alt: "The Wahlen Foundation - by DJL",
       },
     ],
   },
@@ -73,18 +76,18 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     site: "@JackatDJL",
-    title: "The Presentation Foundation - by DJL",
+    title: "The Wahlen Foundation - by DJL",
     description:
-      "A Platform to host your Presentations on without the hasstle of logging in and hosting your files on a Cloud Service.",
+      "Experience a revolutionary voting platform – modern, secure, and intuitive. Transform your election process with The Wahlen Foundation.",
     images: {
       url: "/img/og.png",
       width: 1200,
       height: 630,
-      alt: "The Presentation Foundation - by DJL",
+      alt: "The Wahlen Foundation - by DJL",
     },
   },
   category: "Internet",
-  classification: "Presentation Foundation",
+  classification: "Voting Platform",
 };
 
 export default function RootLayout({
@@ -108,7 +111,7 @@ export default function RootLayout({
               disableTransitionOnChange
             >
               <Toaster />
-              <div className="bg-background text-foreground flex min-h-screen flex-col">
+              <div className="flex min-h-screen flex-col bg-background text-foreground">
                 <Header />
                 <main className="flex-grow">{children}</main>
                 <Footer />
