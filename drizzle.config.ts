@@ -6,7 +6,6 @@ export default {
   schema: "./src/server/db/schema.ts",
   dialect: "postgresql",
   dbCredentials: {
-    url: env.DATABASE_URL,
+    url: `postgres://${env.DB_OWNER_PGUSER}:${env.DB_OWNER_PGPASSWORD}@${env.DB_OWNER_PGHOST}/${env.DB_PGDATABASE}?sslmode=require`,
   },
-  tablesFilter: ["wahlen-foundation_*"],
 } satisfies Config;

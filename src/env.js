@@ -1,44 +1,53 @@
 import { createEnv } from "@t3-oss/env-nextjs";
 import { z } from "zod";
 
+// IMPORTANT: To Load the env use (vercel env pull .env) / our db needs the .env not .env.local
+
 export const env = createEnv({
-  /**
-   * Specify your server-side environment variables schema here. This way you can ensure the app
-   * isn't built with invalid env vars.
-   */
   server: {
-    DATABASE_URL: z.string().url(),
     NODE_ENV: z
       .enum(["development", "test", "production"])
       .default("development"),
-  },
+    // VERCEL_URL: z.string().url(),
 
-  /**
-   * Specify your client-side environment variables schema here. This way you can ensure the app
-   * isn't built with invalid env vars. To expose them to the client, prefix them with
-   * `NEXT_PUBLIC_`.
-   */
+    // New Database variables
+    DB_OWNER_PGHOST: z.string(),
+    DB_OWNER_PGPASSWORD: z.string(),
+    DB_OWNER_PGUSER: z.string(),
+    DB_MAIN_PGHOST: z.string(),
+    DB_MAIN_PGPASSWORD: z.string(),
+    DB_MAIN_PGUSER: z.string(),
+    DB_PGDATABASE: z.string(),
+    DB_READ1_PGHOST: z.string(),
+    DB_READ1_PGPASSWORD: z.string(),
+    DB_READ1_PGUSER: z.string(),
+    DB_READ2_PGHOST: z.string(),
+    DB_READ2_PGPASSWORD: z.string(),
+    DB_READ2_PGUSER: z.string(),
+  },
   client: {
     // NEXT_PUBLIC_CLIENTVAR: z.string(),
   },
-
-  /**
-   * You can't destruct `process.env` as a regular object in the Next.js edge runtimes (e.g.
-   * middlewares) or client-side so we need to destruct manually.
-   */
   runtimeEnv: {
-    DATABASE_URL: process.env.DATABASE_URL,
     NODE_ENV: process.env.NODE_ENV,
+    // VERCEL_URL: process.env.VERCEL_URL,
     // NEXT_PUBLIC_CLIENTVAR: process.env.NEXT_PUBLIC_CLIENTVAR,
+
+    // New Database environment variables
+    DB_OWNER_PGHOST: process.env.DB_OWNER_PGHOST,
+    DB_OWNER_PGPASSWORD: process.env.DB_OWNER_PGPASSWORD,
+    DB_OWNER_PGUSER: process.env.DB_OWNER_PGUSER,
+    DB_MAIN_PGHOST: process.env.DB_MAIN_PGHOST,
+    DB_MAIN_PGPASSWORD: process.env.DB_MAIN_PGPASSWORD,
+    DB_MAIN_PGUSER: process.env.DB_MAIN_PGUSER,
+    DB_PGDATABASE: process.env.DB_PGDATABASE,
+    DB_READ1_PGHOST: process.env.DB_READ1_PGHOST,
+    DB_READ1_PGPASSWORD: process.env.DB_READ1_PGPASSWORD,
+    DB_READ1_PGUSER: process.env.DB_READ1_PGUSER,
+    DB_READ2_PGHOST: process.env.DB_READ2_PGHOST,
+    DB_READ2_PGPASSWORD: process.env.DB_READ2_PGPASSWORD,
+    DB_READ2_PGUSER: process.env.DB_READ2_PGUSER,
   },
-  /**
-   * Run `build` or `dev` with `SKIP_ENV_VALIDATION` to skip env validation. This is especially
-   * useful for Docker builds.
-   */
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,
-  /**
-   * Makes it so that empty strings are treated as undefined. `SOME_VAR: z.string()` and
-   * `SOME_VAR=''` will throw an error.
-   */
   emptyStringAsUndefined: true,
 });
