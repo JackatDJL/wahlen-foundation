@@ -2,7 +2,12 @@ import { z } from "zod";
 import { publicProcedure } from "~/server/api/trpc";
 import { randomUUID } from "crypto";
 import { db } from "~/server/db";
-import { questions } from "~/server/db/schema";
+import {
+  questionInfo,
+  questionMultipleChoice,
+  questions,
+  questionTrueFalse,
+} from "~/server/db/schema";
 
 export const chunkProcedure = publicProcedure
   .input(
@@ -12,36 +17,46 @@ export const chunkProcedure = publicProcedure
         z.discriminatedUnion("type", [
           z.object({
             type: z.literal("info"),
-            title: z.string().min(3).max(256),
-            markdown: z.string().optional(),
-          }),
-          z.object({
-            type: z.literal("true_false"),
+
             title: z.string().min(3).max(256),
             description: z.string().optional(),
+          }),
+
+          z.object({
+            type: z.literal("true_false"),
+
+            title: z.string().min(3).max(256),
+            description: z.string().optional(),
+
             content: z.object({
               option1: z.object({
                 title: z.string().min(3).max(256),
                 description: z.string().optional(),
+
                 correct: z.boolean().default(false),
                 colour: z.string().optional(),
               }),
               option2: z.object({
                 title: z.string().min(3).max(256),
                 description: z.string().optional(),
+
                 correct: z.boolean().default(false),
                 colour: z.string().optional(),
               }),
             }),
           }),
+
           z.object({
             type: z.literal("multiple_choice"),
+
             title: z.string().min(3).max(256),
             description: z.string().optional(),
+
             content: z.array(
               z.object({
                 title: z.string().min(3).max(256),
                 description: z.string().optional(),
+
                 correct: z.boolean().default(false),
                 colour: z.string().optional(),
               }),
@@ -52,78 +67,151 @@ export const chunkProcedure = publicProcedure
     }),
   )
   .mutation(async ({ input }) => {
-    const now = new Date();
-    const insertables = input.data.map((item) => {
-      switch (item.type) {
-        case "info":
-          return {
+    const responses: (
+      | typeof questionInfo.$inferSelect
+      | typeof questionTrueFalse.$inferSelect
+      | typeof questionMultipleChoice.$inferSelect
+    )[] = [];
+    for (const chunk of input.data) {
+      switch (chunk.type) {
+        case "info": {
+          const rootInfoInsertable: typeof questions.$inferInsert = {
             id: randomUUID(),
             wahlId: input.wahlId,
-            title: item.title,
-            type: "info" as const,
-            options: {
-              markdown: item.markdown,
-            },
-            createdAt: now,
-            updatedAt: now,
+
+            type: "info",
+
+            questionId: randomUUID(),
+
+            createdAt: new Date(),
+            updatedAt: new Date(),
           };
-        case "true_false":
-          return {
-            id: randomUUID(),
-            wahlId: input.wahlId,
-            title: item.title,
-            type: "true_false" as const,
-            options: {
-              description: item.description,
-              content: {
-                option1: {
-                  title: item.content.option1.title,
-                  description: item.content.option1.description,
-                  correct: item.content.option1.correct,
-                  colour: item.content.option1.colour,
-                },
-                option2: {
-                  title: item.content.option2.title,
-                  description: item.content.option2.description,
-                  correct: item.content.option2.correct,
-                  colour: item.content.option2.colour,
-                },
-              },
-            },
-            createdAt: now,
-            updatedAt: now,
+
+          await db.insert(questions).values(rootInfoInsertable);
+
+          const infoInsertable: typeof questionInfo.$inferInsert = {
+            id: rootInfoInsertable.questionId ?? "",
+            questionId: rootInfoInsertable.id ?? "",
+
+            title: chunk.title,
+            description: chunk.description,
+
+            createdAt: new Date(),
+            updatedAt: new Date(),
           };
-        case "multiple_choice":
-          return {
+
+          const InfoResponse = (
+            await db.insert(questionInfo).values(infoInsertable).returning()
+          )[0];
+          if (!InfoResponse) {
+            throw new Error("Failed to create question");
+          }
+
+          responses.push(InfoResponse);
+          break;
+        }
+
+        case "true_false": {
+          const rootTrueFalseInsertable: typeof questions.$inferInsert = {
             id: randomUUID(),
             wahlId: input.wahlId,
-            title: item.title,
-            type: "multiple_choice" as const,
-            options: {
-              description: item.description,
-              content: item.content.map((option) => ({
-                title: option.title,
-                description: option.description,
-                correct: option.correct,
-                colour: option.colour,
+
+            type: "true_false",
+
+            questionId: randomUUID(),
+
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          };
+
+          await db.insert(questions).values(rootTrueFalseInsertable);
+
+          const trueFalseInsertable: typeof questionTrueFalse.$inferInsert = {
+            id: rootTrueFalseInsertable.questionId ?? "",
+            questionId: rootTrueFalseInsertable.id ?? "",
+
+            title: chunk.title,
+            description: chunk.description,
+
+            o1Id: randomUUID(),
+            o1Title: chunk.content.option1.title,
+            o1Description: chunk.content.option1.description,
+            o1Correct: chunk.content.option1.correct,
+            o1Colour: chunk.content.option1.colour,
+
+            o2Id: randomUUID(),
+            o2Title: chunk.content.option2.title,
+            o2Description: chunk.content.option2.description,
+            o2Correct: chunk.content.option2.correct,
+            o2Colour: chunk.content.option2.colour,
+
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          };
+
+          const trueFalseResponse = (
+            await db
+              .insert(questionTrueFalse)
+              .values(trueFalseInsertable)
+              .returning()
+          )[0];
+          if (!trueFalseResponse) {
+            throw new Error("Failed to create question");
+          }
+
+          responses.push(trueFalseResponse);
+          break;
+        }
+
+        case "multiple_choice": {
+          const rootMultipleChoiceInsertable: typeof questions.$inferInsert = {
+            id: randomUUID(),
+            wahlId: input.wahlId,
+
+            type: "multiple_choice",
+            questionId: randomUUID(),
+
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          };
+
+          await db.insert(questions).values(rootMultipleChoiceInsertable);
+
+          const multipleChoiceInsertable: typeof questionMultipleChoice.$inferInsert =
+            {
+              id: rootMultipleChoiceInsertable.questionId ?? "",
+              questionId: rootMultipleChoiceInsertable.id ?? "",
+
+              title: chunk.title,
+              description: chunk.description,
+
+              content: chunk.content.map((c) => ({
+                id: randomUUID(),
+                title: c.title,
+                description: c.description,
+                correct: c.correct,
+                colour: c.colour,
               })),
-            },
-            createdAt: now,
-            updatedAt: now,
-          };
-        default:
-          throw new Error("Unsupported question type");
+
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            };
+
+          const multipleChoiceResponse = (
+            await db
+              .insert(questionMultipleChoice)
+              .values(multipleChoiceInsertable)
+              .returning()
+          )[0];
+          if (!multipleChoiceResponse) {
+            throw new Error("Failed to create question");
+          }
+
+          responses.push(multipleChoiceResponse);
+          break;
+        }
       }
-    });
 
-    const responses = await db
-      .insert(questions)
-      .values(insertables)
-      .returning();
-
-    if (responses.length === 0) {
-      throw new Error("Failed to create questions");
+      return responses;
     }
-
-    return responses;
   });

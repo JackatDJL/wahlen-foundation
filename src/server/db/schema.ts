@@ -1,15 +1,17 @@
 import {
   pgEnum,
   pgTable,
-  primaryKey,
   text,
   timestamp,
   uuid,
   varchar,
+  boolean,
   jsonb,
   index,
+  integer,
+  pgView,
 } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { desc, eq, not, or, relations } from "drizzle-orm";
 
 // -----------------  Enumerators  -----------------
 
@@ -93,6 +95,29 @@ export const sessionStatusTypeEnum = pgEnum("session_status_type", [
   "revoked",
 ]);
 
+/**
+ * File Types
+ */
+export const file_types = pgEnum("file_types", ["logo", "banner", "candidate"]);
+
+/**
+ * Storage Providers
+ */
+export const fileStorage_types = pgEnum("fileStorage_types", [
+  "utfs", // Uploadthing // utfs.io
+  "blob", // Vercel Blob
+  // Possibly s3 in the future
+]);
+
+/**
+ * Storage Transfer Types
+ */
+export const fileTransfer_types = pgEnum("fileTransfer_types", [
+  "idle",
+  "queued",
+  "in progress",
+]);
+
 // -----------------  Tables  -----------------
 
 /**
@@ -152,6 +177,7 @@ export const wahlenRelations = relations(wahlen, ({ many }) => ({
   eligible: many(eligible),
   stimmen: many(stimmen),
   sessions: many(sessions),
+  files: many(files),
 }));
 
 // -----------------
@@ -164,20 +190,15 @@ export const questions = pgTable(
       .notNull()
       .references(() => wahlen.id, { onDelete: "cascade" }),
 
-    title: varchar("title", { length: 256 }).notNull(),
-
     type: questionTypeEnum("type").notNull(),
-
-    options: jsonb("options"),
+    questionId: uuid("question_id"),
 
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
-  (table) => {
-    return {
-      wahlIdIdx: index("question_wahl_idx").on(table.wahlId),
-    };
-  },
+  (table) => ({
+    wahlIdIdx: index("question_wahl_idx").on(table.wahlId),
+  }),
 );
 
 export const questionsRelations = relations(questions, ({ one, many }) => ({
@@ -185,8 +206,126 @@ export const questionsRelations = relations(questions, ({ one, many }) => ({
     fields: [questions.wahlId],
     references: [wahlen.id],
   }),
+  questionInfo: one(questionInfo),
+  questionTrueFalse: one(questionTrueFalse),
+  questionMultipleChoice: one(questionMultipleChoice),
+
   stimmen: many(stimmen),
 }));
+
+// -----------------
+
+export const questionInfo = pgTable("q-info", {
+  id: uuid("id").primaryKey().defaultRandom().unique(),
+  questionId: uuid("question_id")
+    .notNull()
+    .references(() => questions.id, { onDelete: "cascade" }),
+
+  title: varchar("title", { length: 256 }).notNull(),
+  description: text("description"),
+  image: uuid("image").references(() => files.id, {
+    onDelete: "set null",
+  }),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const questionInfoRelations = relations(questionInfo, ({ one }) => ({
+  question: one(questions, {
+    fields: [questionInfo.questionId],
+    references: [questions.id],
+  }),
+  files: one(files, {
+    fields: [questionInfo.image],
+    references: [files.id],
+  }),
+}));
+
+export const questionTrueFalse = pgTable(
+  "q-true-false",
+  {
+    id: uuid("id").primaryKey().defaultRandom().unique(),
+    questionId: uuid("question_id")
+      .notNull()
+      .references(() => questions.id, { onDelete: "cascade" }),
+    title: varchar("title", { length: 256 }).notNull(),
+    description: text("description"),
+
+    o1Id: uuid("o1_id").notNull(),
+    o1Title: varchar("o1_title", { length: 256 }).notNull(),
+    o1Description: text("o1_description"),
+    o1Correct: boolean("o1_correct").default(false).notNull(),
+    o1Colour: varchar("o1_colour", { length: 7 }),
+    o1Image: uuid("o1_image").references(() => files.id, {
+      onDelete: "set null",
+    }),
+
+    o2Id: uuid("o2_id").notNull(),
+    o2Title: varchar("o2_title", { length: 256 }).notNull(),
+    o2Description: text("o2_description"),
+    o2Correct: boolean("o2_correct").default(false).notNull(),
+    o2Colour: varchar("o2_colour", { length: 7 }),
+    o2Image: uuid("o2_image").references(() => files.id, {
+      onDelete: "set null",
+    }),
+
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    questionIdIdx: index("q-true-false_question_idx").on(table.questionId),
+  }),
+);
+
+export const questionTrueFalseRelations = relations(
+  questionTrueFalse,
+  ({ one }) => ({
+    question: one(questions, {
+      fields: [questionTrueFalse.questionId],
+      references: [questions.id],
+    }),
+  }),
+);
+
+export const questionMultipleChoice = pgTable(
+  "q-multiple-choice",
+  {
+    id: uuid("id").primaryKey().defaultRandom().unique(),
+    questionId: uuid("question_id")
+      .notNull()
+      .references(() => questions.id, { onDelete: "cascade" }),
+    title: varchar("title", { length: 256 }).notNull(),
+    description: text("description"),
+
+    content: jsonb("content").$type<
+      {
+        id: string;
+        title: string;
+        description?: string;
+        correct?: boolean;
+        colour?: string;
+        image?: string;
+      }[]
+    >(),
+
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    questionIdIdx: index("q-multiple-choice_question_idx").on(table.questionId),
+  }),
+);
+
+export const questionMultipleChoiceRelations = relations(
+  questionMultipleChoice,
+  ({ one }) => ({
+    question: one(questions, {
+      fields: [questionMultipleChoice.questionId],
+      references: [questions.id],
+    }),
+  }),
+);
 
 // -----------------
 
@@ -198,7 +337,7 @@ export const eligible = pgTable(
       .notNull()
       .references(() => wahlen.id, { onDelete: "cascade" }),
 
-    email: varchar("email", { length: 256 }).notNull().unique(),
+    email: varchar("email", { length: 256 }).notNull(), // Only unique within one election
 
     status: eligibilityStatusTypeEnum("status").default("draft").notNull(),
 
@@ -240,7 +379,7 @@ export const stimmen = pgTable(
       .notNull()
       .references(() => sessions.id, { onDelete: "cascade" }), // Foreign Key zur Session
 
-    answer: jsonb("answer").notNull(),
+    answerId: uuid("answer_id").notNull(),
     signed: text("signed").notNull(),
     signedAt: timestamp("signed_at").notNull(),
 
@@ -310,3 +449,112 @@ export const sessionsRelations = relations(sessions, ({ one, many }) => ({
   }),
   stimmen: many(stimmen),
 }));
+
+// -----------------
+
+export const files = pgTable("files", {
+  id: uuid("id").primaryKey().defaultRandom().unique(),
+  name: text("name").notNull(),
+  fileType: file_types("fileType").notNull(),
+  dataType: text("dataType").notNull(),
+  size: integer("size").notNull(),
+
+  ufsKey: varchar("ufs_key", { length: 48 }),
+  blobPath: varchar("blob_path"),
+  url: text("url").notNull(),
+
+  storedIn: fileStorage_types("stored_in").notNull().default("utfs"),
+  targetStorage: fileStorage_types("target_storage").notNull().default("blob"),
+  transferStatus: fileTransfer_types("transfer_status")
+    .notNull()
+    .default("idle"),
+
+  wahlId: uuid("wahl_id")
+    .references(() => wahlen.id)
+    .notNull(),
+  questionId: uuid("question_id")
+    .notNull()
+    .references(() => questions.id),
+  answerId: uuid("answer_id").notNull(),
+  owner: varchar("owner", { length: 32 }).notNull(),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const filesRelations = relations(files, ({ one }) => ({
+  wahl: one(wahlen, {
+    fields: [files.wahlId],
+    references: [wahlen.id],
+  }),
+  question: one(questions, {
+    fields: [files.questionId],
+    references: [questions.id],
+  }),
+}));
+
+// ----------------- Views -----------------
+
+export const wahlenView = pgView("wahlen_view").as((qb) =>
+  qb.select().from(wahlen).orderBy(desc(wahlen.updatedAt)),
+);
+
+// -----------------
+
+export const questionView = pgView("question_view").as((qb) =>
+  qb.select().from(questions).orderBy(desc(questions.updatedAt)),
+);
+
+export const questionInfoView = pgView("question_info_view").as((qb) =>
+  qb.select().from(questionInfo).orderBy(desc(questionInfo.updatedAt)),
+);
+
+export const questionTrueFalseView = pgView("question_true_false_view").as(
+  (qb) =>
+    qb
+      .select()
+      .from(questionTrueFalse)
+      .orderBy(desc(questionTrueFalse.updatedAt)),
+);
+
+export const questionMultipleChoiceView = pgView(
+  "question_multiple_choice_view",
+).as((qb) =>
+  qb
+    .select()
+    .from(questionMultipleChoice)
+    .orderBy(desc(questionMultipleChoice.updatedAt)),
+);
+
+// -----------------
+
+export const eligibleView = pgView("eligible_view").as((qb) =>
+  qb.select().from(eligible).orderBy(desc(eligible.updatedAt)),
+);
+
+// -----------------
+
+export const sessionsView = pgView("sessions_view").as((qb) =>
+  qb.select().from(sessions).orderBy(desc(sessions.updatedAt)),
+);
+
+// -----------------
+
+export const stimmenView = pgView("stimmen_view").as((qb) =>
+  qb.select().from(stimmen).orderBy(desc(stimmen.updatedAt)),
+);
+
+// -----------------
+
+export const filesView = pgView("files_view").as((qb) =>
+  qb.select().from(files).orderBy(desc(files.updatedAt)),
+);
+
+export const transcendingFilesView = pgView("transcending_files_view").as(
+  (qb) =>
+    qb
+      .select()
+      .from(files)
+      .where(not(eq(files.transferStatus, "idle")))
+      .orderBy(desc(files.updatedAt)),
+);

@@ -3,7 +3,12 @@ import { z } from "zod";
 
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
 import { db } from "~/server/db";
-import { questions } from "~/server/db/schema";
+import {
+  questionInfo,
+  questionMultipleChoice,
+  questions,
+  questionTrueFalse,
+} from "~/server/db/schema";
 import { chunkProcedure } from "./create-chunk";
 
 export const creationRouter = createTRPCRouter({
@@ -14,8 +19,7 @@ export const creationRouter = createTRPCRouter({
         wahlId: z.string().uuid(),
 
         title: z.string().min(3).max(256),
-
-        markdown: z.string().optional(),
+        description: z.string().optional(),
       }),
     )
     .mutation(async ({ input }) => {
@@ -23,28 +27,35 @@ export const creationRouter = createTRPCRouter({
         id: randomUUID(),
         wahlId: input.wahlId,
 
-        title: input.title,
-
         type: "info",
 
-        options: {
-          markdown: input.markdown,
-        },
+        questionId: randomUUID(),
 
         createdAt: new Date(),
         updatedAt: new Date(),
       };
 
-      const response = await db
-        .insert(questions)
-        .values(insertable)
-        .returning();
+      await db.insert(questions).values(insertable);
 
-      if (!response[0]) {
+      const qInsertable: typeof questionInfo.$inferInsert = {
+        id: insertable.questionId ?? "",
+        questionId: insertable.id ?? "",
+
+        title: input.title,
+        description: input.description,
+
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      const response = (
+        await db.insert(questionInfo).values(qInsertable).returning()
+      )[0];
+      if (!response) {
         throw new Error("Failed to create question");
       }
 
-      return response[0];
+      return response;
     }),
   true_false: publicProcedure
     .input(
@@ -77,42 +88,44 @@ export const creationRouter = createTRPCRouter({
         id: randomUUID(),
         wahlId: input.wahlId,
 
-        title: input.title,
-
         type: "true_false",
-
-        options: {
-          description: input.description,
-          content: {
-            option1: {
-              title: input.content.option1.title,
-              description: input.content.option1.description,
-              correct: input.content.option1.correct,
-              colour: input.content.option1.colour,
-            },
-            option2: {
-              title: input.content.option2.title,
-              description: input.content.option2.description,
-              correct: input.content.option2.correct,
-              colour: input.content.option2.colour,
-            },
-          },
-        },
+        questionId: randomUUID(),
 
         createdAt: new Date(),
         updatedAt: new Date(),
       };
 
-      const response = await db
-        .insert(questions)
-        .values(insertable)
-        .returning();
+      await db.insert(questions).values(insertable);
 
-      if (!response[0]) {
+      const qInsertable: typeof questionTrueFalse.$inferInsert = {
+        id: insertable.questionId ?? "",
+        questionId: insertable.id ?? "",
+        title: input.title,
+        description: input.description,
+
+        o1Id: randomUUID(),
+        o1Title: input.content.option1.title,
+        o1Description: input.content.option1.description,
+        o1Correct: input.content.option1.correct,
+        o1Colour: input.content.option1.colour,
+
+        o2Id: randomUUID(),
+        o2Title: input.content.option2.title,
+        o2Description: input.content.option2.description,
+        o2Correct: input.content.option2.correct,
+        o2Colour: input.content.option2.colour,
+
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      const response = (
+        await db.insert(questionTrueFalse).values(qInsertable).returning()
+      )[0];
+      if (!response) {
         throw new Error("Failed to create question");
       }
-
-      return response[0];
+      return response;
     }),
   multiple_choice: publicProcedure
     .input(
@@ -138,32 +151,39 @@ export const creationRouter = createTRPCRouter({
         id: randomUUID(),
         wahlId: input.wahlId,
 
-        title: input.title,
-
         type: "multiple_choice",
-
-        options: {
-          content: input.content.map((option) => ({
-            title: option.title,
-            description: option.description,
-            correct: option.correct,
-            colour: option.colour,
-          })),
-        },
+        questionId: randomUUID(),
 
         createdAt: new Date(),
         updatedAt: new Date(),
       };
 
-      const response = await db
-        .insert(questions)
-        .values(insertable)
-        .returning();
+      await db.insert(questions).values(insertable);
 
-      if (!response[0]) {
+      const qInsertable: typeof questionMultipleChoice.$inferInsert = {
+        id: insertable.questionId ?? "",
+        questionId: insertable.id ?? "",
+        title: input.title,
+        description: input.description,
+
+        content: input.content.map((item) => ({
+          id: randomUUID(),
+          title: item.title,
+          description: item.description,
+          correct: item.correct,
+          colour: item.colour,
+        })),
+
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      const response = (
+        await db.insert(questionMultipleChoice).values(qInsertable).returning()
+      )[0];
+      if (!response) {
         throw new Error("Failed to create question");
       }
-
-      return response[0];
+      return response;
     }),
 });
