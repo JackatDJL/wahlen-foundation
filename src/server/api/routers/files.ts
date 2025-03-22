@@ -1,7 +1,11 @@
 import { eq, not, and, or } from "drizzle-orm";
 import { z } from "zod";
 
-import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
+import {
+  createTRPCRouter,
+  protectedProcedure,
+  publicProcedure,
+} from "~/server/api/trpc";
 
 import { db } from "~/server/db";
 import { del, put } from "@vercel/blob";
@@ -251,8 +255,77 @@ async function removeInternalQuestionFile(
   }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const uuidType = z.string().uuid();
+export async function deleteById(input: z.infer<typeof uuidType>) {
+  uuidType.parse(input);
+  // Check if the file exists
+  let file = (
+    await db
+      .select()
+      .from(files)
+      .where(or(eq(files.answerId, input), eq(files.id, input)))
+      .limit(1)
+  )[0];
+
+  if (!file || file.transferStatus === "in progress") {
+    throw new Error("File not found or currently Trancending Servers");
+  }
+  // Immediatly remove the file from the queue so that the file doesnt get lost trancending servers
+  if (file.transferStatus === "queued") {
+    file = (
+      await db
+        .update(files)
+        .set({
+          targetStorage: file.storedIn,
+          transferStatus: "idle",
+        })
+        .where(eq(files.id, input))
+        .returning()
+    )[0];
+    if (!file) {
+      throw new Error("File not found");
+    }
+  }
+  // Get the presentationId and the filetype
+
+  // Delete the file from the corresponding service
+  switch (file.storedIn) {
+    case "utfs":
+      if (!file.ufsKey) {
+        throw new Error("No Key Provided");
+      }
+      const deletionResponse = await utapi.deleteFiles(file.ufsKey);
+      if (!deletionResponse.success || deletionResponse.deletedCount !== 1) {
+        throw new Error("Failed to delete file");
+      }
+      break;
+    case "blob":
+      if (!file.blobPath) {
+        throw new Error("No Path Provided");
+      }
+      await del(file.blobPath);
+      break;
+  }
+
+  // Update the presentation to remove the file
+
+  await removeInternalQuestionFile(file.questionId, file.answerId);
+
+  // Delete the file from the db
+  const dbFileResponse = await db
+    .delete(files)
+    .where(eq(files.id, input))
+    .returning();
+  if (dbFileResponse.length !== 1) {
+    throw new Error("Failed to delete file");
+  }
+
+  return;
+}
+
 export const fileRouter = createTRPCRouter({
-  create: publicProcedure
+  create: publicProcedure // only called by server!
     .input(
       z.object({
         name: z.string(),
@@ -346,79 +419,15 @@ export const fileRouter = createTRPCRouter({
     return file[0];
   }),
 
-  deleteById: publicProcedure
+  deleteById: protectedProcedure
     .input(z.string().uuid())
     .mutation(async ({ input }) => {
-      // Check if the file exists
-      let file = (
-        await db
-          .select()
-          .from(files)
-          .where(or(eq(files.answerId, input), eq(files.id, input)))
-          .limit(1)
-      )[0];
-
-      if (!file || file.transferStatus === "in progress") {
-        throw new Error("File not found or currently Trancending Servers");
-      }
-      // Immediatly remove the file from the queue so that the file doesnt get lost trancending servers
-      if (file.transferStatus === "queued") {
-        file = (
-          await db
-            .update(files)
-            .set({
-              targetStorage: file.storedIn,
-              transferStatus: "idle",
-            })
-            .where(eq(files.id, input))
-            .returning()
-        )[0];
-        if (!file) {
-          throw new Error("File not found");
-        }
-      }
-      // Get the presentationId and the filetype
-
-      // Delete the file from the corresponding service
-      switch (file.storedIn) {
-        case "utfs":
-          if (!file.ufsKey) {
-            throw new Error("No Key Provided");
-          }
-          const deletionResponse = await utapi.deleteFiles(file.ufsKey);
-          if (
-            !deletionResponse.success ||
-            deletionResponse.deletedCount !== 1
-          ) {
-            throw new Error("Failed to delete file");
-          }
-          break;
-        case "blob":
-          if (!file.blobPath) {
-            throw new Error("No Path Provided");
-          }
-          await del(file.blobPath);
-          break;
-      }
-
-      // Update the presentation to remove the file
-
-      await removeInternalQuestionFile(file.questionId, file.answerId);
-
-      // Delete the file from the db
-      const dbFileResponse = await db
-        .delete(files)
-        .where(eq(files.id, input))
-        .returning();
-      if (dbFileResponse.length !== 1) {
-        throw new Error("Failed to delete file");
-      }
-
-      return;
+      return await deleteById(input);
     }),
 
   transfers: createTRPCRouter({
     run: publicProcedure.mutation(async () => {
+      // SERVER
       // First set all the files wo are idle and storedIn !== targetStorage to queued
       // This will probably only be called if i manually move around files between storage services
 

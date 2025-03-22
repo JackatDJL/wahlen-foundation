@@ -11,7 +11,7 @@ import {
   integer,
   pgView,
 } from "drizzle-orm/pg-core";
-import { desc, eq, not, or, relations } from "drizzle-orm";
+import { desc, eq, not, relations } from "drizzle-orm";
 
 // -----------------  Enumerators  -----------------
 

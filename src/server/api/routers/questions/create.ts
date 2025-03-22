@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { z } from "zod";
 
-import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
+import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
 import { db } from "~/server/db";
 import {
   questionInfo,
@@ -11,9 +11,31 @@ import {
 } from "~/server/db/schema";
 import { chunkProcedure } from "./create-chunk";
 
+const uuidType = z.string().uuid();
+export async function insertableRootQuestion(
+  wahlId: string,
+  type: "info" | "true_false" | "multiple_choice",
+) {
+  uuidType.parse(wahlId);
+  const insertable: typeof questions.$inferInsert = {
+    id: randomUUID(),
+    wahlId,
+
+    type,
+
+    questionId: randomUUID(),
+
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  await db.insert(questions).values(insertable);
+  return insertable;
+}
+
 export const creationRouter = createTRPCRouter({
   chunk: chunkProcedure,
-  info: publicProcedure
+  info: protectedProcedure
     .input(
       z.object({
         wahlId: z.string().uuid(),
@@ -23,19 +45,7 @@ export const creationRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ input }) => {
-      const insertable: typeof questions.$inferInsert = {
-        id: randomUUID(),
-        wahlId: input.wahlId,
-
-        type: "info",
-
-        questionId: randomUUID(),
-
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-
-      await db.insert(questions).values(insertable);
+      const insertable = await insertableRootQuestion(input.wahlId, "info");
 
       const qInsertable: typeof questionInfo.$inferInsert = {
         id: insertable.questionId ?? "",
@@ -57,7 +67,7 @@ export const creationRouter = createTRPCRouter({
 
       return response;
     }),
-  true_false: publicProcedure
+  true_false: protectedProcedure
     .input(
       z.object({
         wahlId: z.string().uuid(),
@@ -84,18 +94,10 @@ export const creationRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ input }) => {
-      const insertable: typeof questions.$inferInsert = {
-        id: randomUUID(),
-        wahlId: input.wahlId,
-
-        type: "true_false",
-        questionId: randomUUID(),
-
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-
-      await db.insert(questions).values(insertable);
+      const insertable = await insertableRootQuestion(
+        input.wahlId,
+        "true_false",
+      );
 
       const qInsertable: typeof questionTrueFalse.$inferInsert = {
         id: insertable.questionId ?? "",
@@ -127,7 +129,7 @@ export const creationRouter = createTRPCRouter({
       }
       return response;
     }),
-  multiple_choice: publicProcedure
+  multiple_choice: protectedProcedure
     .input(
       z.object({
         wahlId: z.string().uuid(),
@@ -147,18 +149,10 @@ export const creationRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ input }) => {
-      const insertable: typeof questions.$inferInsert = {
-        id: randomUUID(),
-        wahlId: input.wahlId,
-
-        type: "multiple_choice",
-        questionId: randomUUID(),
-
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-
-      await db.insert(questions).values(insertable);
+      const insertable = await insertableRootQuestion(
+        input.wahlId,
+        "multiple_choice",
+      );
 
       const qInsertable: typeof questionMultipleChoice.$inferInsert = {
         id: insertable.questionId ?? "",

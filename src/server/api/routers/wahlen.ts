@@ -1,13 +1,17 @@
 import { z } from "zod";
 import { db } from "~/server/db";
 
-import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
+import {
+  createTRPCRouter,
+  protectedProcedure,
+  publicProcedure,
+} from "~/server/api/trpc";
 import { wahlen } from "~/server/db/schema";
 import { randomUUID } from "crypto";
 import { eq } from "drizzle-orm";
 
 export const wahlenRouter = createTRPCRouter({
-  create: publicProcedure
+  create: protectedProcedure
     .input(
       z.object({
         shortname: z.string().min(3).max(25),
@@ -36,7 +40,7 @@ export const wahlenRouter = createTRPCRouter({
 
       return response[0];
     }),
-  edit: publicProcedure
+  edit: protectedProcedure
     .input(
       z.object({
         id: z.string().uuid(),
@@ -110,4 +114,5 @@ export const wahlenRouter = createTRPCRouter({
 
       return response[0];
     }),
+  getByShortname: publicProcedure.query(() => ""),
 });

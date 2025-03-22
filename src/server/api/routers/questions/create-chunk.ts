@@ -1,15 +1,15 @@
 import { z } from "zod";
-import { publicProcedure } from "~/server/api/trpc";
+import { protectedProcedure } from "~/server/api/trpc";
 import { randomUUID } from "crypto";
 import { db } from "~/server/db";
 import {
   questionInfo,
   questionMultipleChoice,
-  questions,
   questionTrueFalse,
 } from "~/server/db/schema";
+import { insertableRootQuestion } from "./create";
 
-export const chunkProcedure = publicProcedure
+export const chunkProcedure = protectedProcedure
   .input(
     z.object({
       wahlId: z.string().uuid(),
@@ -75,19 +75,10 @@ export const chunkProcedure = publicProcedure
     for (const chunk of input.data) {
       switch (chunk.type) {
         case "info": {
-          const rootInfoInsertable: typeof questions.$inferInsert = {
-            id: randomUUID(),
-            wahlId: input.wahlId,
-
-            type: "info",
-
-            questionId: randomUUID(),
-
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          };
-
-          await db.insert(questions).values(rootInfoInsertable);
+          const rootInfoInsertable = await insertableRootQuestion(
+            input.wahlId,
+            "info",
+          );
 
           const infoInsertable: typeof questionInfo.$inferInsert = {
             id: rootInfoInsertable.questionId ?? "",
@@ -112,19 +103,10 @@ export const chunkProcedure = publicProcedure
         }
 
         case "true_false": {
-          const rootTrueFalseInsertable: typeof questions.$inferInsert = {
-            id: randomUUID(),
-            wahlId: input.wahlId,
-
-            type: "true_false",
-
-            questionId: randomUUID(),
-
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          };
-
-          await db.insert(questions).values(rootTrueFalseInsertable);
+          const rootTrueFalseInsertable = await insertableRootQuestion(
+            input.wahlId,
+            "true_false",
+          );
 
           const trueFalseInsertable: typeof questionTrueFalse.$inferInsert = {
             id: rootTrueFalseInsertable.questionId ?? "",
@@ -164,18 +146,10 @@ export const chunkProcedure = publicProcedure
         }
 
         case "multiple_choice": {
-          const rootMultipleChoiceInsertable: typeof questions.$inferInsert = {
-            id: randomUUID(),
-            wahlId: input.wahlId,
-
-            type: "multiple_choice",
-            questionId: randomUUID(),
-
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          };
-
-          await db.insert(questions).values(rootMultipleChoiceInsertable);
+          const rootMultipleChoiceInsertable = await insertableRootQuestion(
+            input.wahlId,
+            "multiple_choice",
+          );
 
           const multipleChoiceInsertable: typeof questionMultipleChoice.$inferInsert =
             {
@@ -211,7 +185,7 @@ export const chunkProcedure = publicProcedure
           break;
         }
       }
-
-      return responses;
     }
+
+    return responses;
   });
