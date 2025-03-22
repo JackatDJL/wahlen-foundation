@@ -8,6 +8,7 @@ import {
   questionTrueFalse,
 } from "~/server/db/schema";
 import { insertableRootQuestion } from "./create";
+import { throwIfActive } from "./delete";
 
 export const chunkProcedure = protectedProcedure
   .input(
@@ -67,6 +68,8 @@ export const chunkProcedure = protectedProcedure
     }),
   )
   .mutation(async ({ input }) => {
+    await throwIfActive(input.wahlId);
+
     const responses: (
       | typeof questionInfo.$inferSelect
       | typeof questionTrueFalse.$inferSelect

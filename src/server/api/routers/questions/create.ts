@@ -10,6 +10,7 @@ import {
   questionTrueFalse,
 } from "~/server/db/schema";
 import { chunkProcedure } from "./create-chunk";
+import { throwIfActive } from "./delete";
 
 const uuidType = z.string().uuid();
 export async function insertableRootQuestion(
@@ -45,6 +46,7 @@ export const creationRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ input }) => {
+      await throwIfActive(input.wahlId);
       const insertable = await insertableRootQuestion(input.wahlId, "info");
 
       const qInsertable: typeof questionInfo.$inferInsert = {
@@ -94,6 +96,7 @@ export const creationRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ input }) => {
+      await throwIfActive(input.wahlId);
       const insertable = await insertableRootQuestion(
         input.wahlId,
         "true_false",
@@ -149,6 +152,7 @@ export const creationRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ input }) => {
+      await throwIfActive(input.wahlId);
       const insertable = await insertableRootQuestion(
         input.wahlId,
         "multiple_choice",

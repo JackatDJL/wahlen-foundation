@@ -12,6 +12,7 @@ import { eq, or } from "drizzle-orm";
 import { db } from "~/server/db";
 import { randomUUID } from "crypto";
 import { deleteById } from "../files";
+import { throwIfActive } from "./delete";
 
 const uuidType = z.string().uuid();
 export async function setUpdateDateOnQuestion(
@@ -50,6 +51,7 @@ export const editRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ input }) => {
+      await throwIfActive(input.id);
       await setUpdateDateOnQuestion(input.id);
       const response = (
         await db
@@ -96,6 +98,8 @@ export const editRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ input }) => {
+      await throwIfActive(input.id);
+
       await setUpdateDateOnQuestion(input.id);
       const response = (
         await db
@@ -167,6 +171,7 @@ export const editRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ input }) => {
+      await throwIfActive(input.id);
       await setUpdateDateOnQuestion(input.id);
       let content = (
         await db
