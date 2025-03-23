@@ -5,6 +5,31 @@
 import "./src/env.js";
 
 /** @type {import("next").NextConfig} */
-const config = {};
+const config = {
+  async rewrites() {
+    return [
+      {
+        source: "/ingest/:path*",
+        destination: "https://eu.i.posthog.com/:path*",
+      },
+    ];
+  },
+  skipTrailingSlashRedirect: true,
+
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "zqq91qvscm.ufs.sh",
+        pathname: "/f/*",
+      },
+      {
+        protocol: "https",
+        hostname: "arvdoawqez6yhriu.public.blob.vercel-storage.com",
+        pathname: "/wahlen/**",
+      },
+    ],
+  },
+};
 
 export default config;

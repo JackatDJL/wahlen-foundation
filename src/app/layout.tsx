@@ -15,6 +15,8 @@ import { TRPCReactProvider } from "~/trpc/react";
 import { ClerkProvider } from "@clerk/nextjs";
 import { Toaster } from "~/components/ui/sonner";
 import { dark } from "@clerk/themes";
+import { PostHogProvider } from "~/server/providers";
+import { env } from "~/env";
 
 // Implement Metadata Images TODO
 export const metadata: Metadata = {
@@ -98,26 +100,29 @@ export default function RootLayout({
       appearance={{
         baseTheme: dark,
       }}
+      afterSignOutUrl={env.NEXT_PUBLIC_CLERK_SIGN_OUT_FORCE_REDIRECT_URL}
     >
       <html lang="en" className={`${GeistSans.variable}`}>
         <body>
-          <Analytics />
-          <SpeedInsights />
-          <TRPCReactProvider>
-            <ThemeProvider
-              attribute="class"
-              defaultTheme="system"
-              enableSystem
-              disableTransitionOnChange
-            >
-              <Toaster />
-              <div className="flex min-h-screen flex-col bg-background text-foreground">
-                <Header />
-                <main className="flex-grow">{children}</main>
-                <Footer />
-              </div>
-            </ThemeProvider>
-          </TRPCReactProvider>
+          <PostHogProvider>
+            <Analytics />
+            <SpeedInsights />
+            <TRPCReactProvider>
+              <ThemeProvider
+                attribute="class"
+                defaultTheme="system"
+                enableSystem
+                disableTransitionOnChange
+              >
+                <Toaster />
+                <div className="flex min-h-screen flex-col bg-background text-foreground">
+                  <Header />
+                  <main className="flex-grow">{children}</main>
+                  <Footer />
+                </div>
+              </ThemeProvider>
+            </TRPCReactProvider>
+          </PostHogProvider>
         </body>
       </html>
     </ClerkProvider>
