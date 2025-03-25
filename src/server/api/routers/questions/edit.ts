@@ -382,7 +382,13 @@ export const editRouter = createTRPCRouter({
         for (const item of deleteRequest) {
           const target = content.find((c) => c.id === item.id);
           if (target?.image) {
-            await deleteById(target.image);
+            const dBId = await deleteById(target.image);
+            if (dBId.isErr()) {
+              return err({
+                type: editErrorTypes.UpdateFailed,
+                message: "Failed to delete image for multiple_choice question",
+              });
+            }
           }
           content = content.filter((c) => c.id !== item.id);
         }
