@@ -1,5 +1,7 @@
 # Create T3 App
 
+![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/JackatDJL/wahlen-foundation?utm_source=oss&utm_medium=github&utm_campaign=JackatDJL%2Fwahlen-foundation&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
+
 This is a [T3 Stack](https://create.t3.gg/) project bootstrapped with `create-t3-app`.
 
 ## What's next? How do I make an app with this?

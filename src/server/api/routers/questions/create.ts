@@ -77,7 +77,6 @@ export async function insertableRootQuestion({
     updatedAt: new Date(),
   };
 
-  // await db.insert(questions).values(insertable);
   const { data: insertedArray, error: insertError } = await tc(
     db.insert(questions).values(insertable).returning(),
   );
