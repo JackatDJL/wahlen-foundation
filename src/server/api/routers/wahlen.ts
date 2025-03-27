@@ -9,37 +9,62 @@ import {
 import { wahlen } from "~/server/db/schema";
 import { randomUUID } from "crypto";
 import { eq } from "drizzle-orm";
+import { Result, err, ok } from "neverthrow";
+import { tc } from "~/lib/tryCatch";
+
+const createWahlType = z.object({
+  shortname: z.string().min(3).max(25),
+
+  title: z.string().min(3).max(256),
+  description: z.string().optional(),
+
+  owner: z.string().length(32),
+});
+
+enum createWahlErrorTypes {
+  Failed = "Failed",
+  Disallowed = "Disallowed",
+}
+
+type createWahlError = {
+  type: createWahlErrorTypes;
+  message: string;
+};
 
 export const wahlenRouter = createTRPCRouter({
   create: protectedProcedure
-    .input(
-      z.object({
-        shortname: z.string().min(3).max(25),
+    .input(createWahlType)
+    .mutation(
+      async ({
+        input,
+      }): Promise<Result<typeof wahlen.$inferSelect, createWahlError>> => {
+        const insertable: typeof wahlen.$inferInsert = {
+          id: randomUUID(),
+          shortname: input.shortname,
 
-        title: z.string().min(3).max(256),
-        description: z.string().optional(),
+          title: input.title,
+          description: input.description,
 
-        owner: z.string().length(32),
-      }),
-    )
-    .mutation(async ({ input }) => {
-      const insertable: typeof wahlen.$inferInsert = {
-        id: randomUUID(),
-        shortname: input.shortname,
+          owner: input.owner,
+        };
+        const { data: insertableResponse, error: insertableError } = await tc(
+          db.insert(wahlen).values(insertable).returning(),
+        );
+        if (insertableError) {
+          return err({
+            type: createWahlErrorTypes.Failed,
+            message: insertableError.message,
+          });
+        }
 
-        title: input.title,
-        description: input.description,
+        const response = insertableResponse[0] ? insertableResponse[0] : null;
+        if (!response) {
+          throw new Error("Failed to create wahl");
+        }
 
-        owner: input.owner,
-      };
-      const response = await db.insert(wahlen).values(insertable).returning();
-
-      if (!response[0]) {
-        throw new Error("Failed to create wahl");
-      }
-
-      return response[0];
-    }),
+        return response[0];
+      },
+    ),
   edit: protectedProcedure
     .input(
       z.object({

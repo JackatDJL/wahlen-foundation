@@ -435,15 +435,7 @@ export const deletionRouter = createTRPCRouter({
           }
         }
       }
-      const delInternal = (
-        await db
-          .delete(questionMultipleChoice)
-          .where(eq(questionMultipleChoice.id, response.id))
-          .returning()
-      )[0];
-      if (!delInternal) {
-        throw new Error("Failed to delete question multiple choice");
-      }
+
       const { data: delInternalArray, error: dbError2 } = await tc(
         db
           .delete(questionMultipleChoice)

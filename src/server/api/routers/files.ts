@@ -401,7 +401,10 @@ async function removeInternalQuestionFile({
           .where(eq(questionTrueFalse.questionId, questionId))
       )[0];
       if (!tFQuestions) {
-        throw new Error("Question not found");
+        return err({
+          type: deleteInternalQuestionFileErrorTypes.NotFound,
+          message: "Question not found",
+        });
       }
       switch (answerId) {
         case tFQuestions.o1Id:
@@ -463,18 +466,12 @@ async function removeInternalQuestionFile({
 
           return ok(tFo2Res);
         default:
-          throw new Error("Answer not found");
+          return err({
+            type: deleteInternalQuestionFileErrorTypes.NotFound,
+            message: "Answer not found",
+          });
       }
     case "multiple_choice":
-      // const mCQuestions = (
-      //   await db
-      //     .select()
-      //     .from(questionMultipleChoice)
-      //     .where(eq(questionMultipleChoice.questionId, questionId))
-      // )[0];
-      // if (!mCQuestions) {
-      //   throw new Error("Question not found");
-      // }
       const { data: mCQuestionsArray, error: mCQuestionsError } = await tc(
         db
           .select()
@@ -714,8 +711,6 @@ export async function deleteById(
     }
   }
 
-  // Delete the file from the db
-
   const { data: dbFileResponseArray, error: dbFileError } = await tc(
     db.delete(files).where(eq(files.id, input)).returning(),
   );
@@ -953,7 +948,6 @@ export const fileRouter = createTRPCRouter({
         // First set all the files wo are idle and storedIn !== targetStorage to queued
         // This will probably only be called if i manually move around files between storage services
 
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { error: dbInitiateStatusError } = await tc(
           db
             .update(files)
@@ -1000,7 +994,6 @@ export const fileRouter = createTRPCRouter({
           });
         }
 
-        // Then get all to be transferred files
         const { data: filesToTransfer, error: filesToTransferError } = await tc(
           db.select().from(files).where(eq(files.transferStatus, "queued")),
         );
@@ -1012,7 +1005,6 @@ export const fileRouter = createTRPCRouter({
           });
         }
 
-        // For each file, transfer it
         for (const file of filesToTransfer) {
           // Set Status
           const { error: SetStatusError } = await tc(
@@ -1071,7 +1063,6 @@ export const fileRouter = createTRPCRouter({
             });
           }
 
-          // Transfer
           switch (file.targetStorage) {
             case "utfs":
               const { data: up_utfs_response, error: up_utfs_error } = await tc(
