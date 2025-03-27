@@ -15,6 +15,68 @@ import { err, ok, type Result } from "neverthrow";
 import { tc } from "~/lib/tryCatch";
 
 const uuidType = z.string().uuid();
+// Generic helper for creating questions of any type
+async function createQuestion <TTable, TInput, TOutput>({
+  input,
+  questionType,
+  buildInsertable,
+  table,
+}: {
+  input: TInput;
+  questionType: "info" | "true_false" | "multiple_choice";
+  buildInsertable: (rootQuestion: typeof questions.$inferSelect, input: TInput) => TTable;
+  table: { insert: (values: TTable) => { returning: () => Promise<TOutput[]> } };
+}): Promise<Result<TOutput, createError>> {
+  // Get wahlId from input (all input types have wahlId)
+  const wahlId = (input as unknown as { wahlId: string }).wahlId;
+  
+  // Check if Wahl is active
+  const tIA = await throwIfActive(wahlId);
+  if (tIA.isErr()) {
+    return err({
+      type: createErrorTypes.Disallowed,
+      message: "Wahl is active",
+    });
+  }
+
+  // Create root question
+  const iRQ = await insertableRootQuestion({
+    wahlId,
+    type: questionType,
+  });
+  if (iRQ.isErr()) {
+    return err({
+      type: createErrorTypes.Failed,
+      message: "Failed to create question",
+    });
+  }
+
+  // Build insertable object specific to question type
+  const insertable = buildInsertable(iRQ.value, input);
+
+  // Insert into database
+  const { data: insertedArray, error: insertError } = await tc(
+    table.insert(insertable).returning(),
+  );
+  if (insertError) {
+    return err({
+      type: createErrorTypes.Failed,
+      message: "Failed to insert question",
+    });
+  }
+
+  // Check if insertion was successful
+  const inserted = insertedArray ? insertedArray[0] : null;
+  if (!inserted) {
+    return err({
+      type: createErrorTypes.NotFound,
+      message: "Failed to insert question",
+    });
+  }
+
+  return ok(inserted);
+}
+
 
 const IRQType = z.object({
   wahlId: uuidType,
@@ -162,194 +224,97 @@ export const creationRouter = createTRPCRouter({
   info: protectedProcedure
     .input(createInfoQuestionType)
     .mutation(
-      async ({
-        input,
-      }): Promise<Result<typeof questionInfo.$inferSelect, createError>> => {
-        const tIA = await throwIfActive(input.wahlId);
-        if (tIA.isErr()) {
-          return err({
-            type: createErrorTypes.Disallowed,
-            message: "Wahl is active",
-          });
-        }
-
-        const iRQ = await insertableRootQuestion({
-          wahlId: input.wahlId,
-          type: "info",
+      async ({ input }): Promise <Result<typeof questionInfo.$inferSelect, createError>> => {
+        return createQuestion({
+          input,
+          questionType: "info",
+          buildInsertable: (rootQuestion, input) => {
+            const insertable: typeof questionInfo.$inferInsert = {
+              id: rootQuestion.id,
+              questionId: rootQuestion.questionId ?? "",
+              title: input.title,
+              description: input.description,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            };
+            return insertable;
+          },
+          table: {
+            insert: (values) => ({
+              returning: () => db.insert(questionInfo).values(values).returning(),
+            }),
+          },
         });
-        if (iRQ.isErr()) {
-          return err({
-            type: createErrorTypes.Failed,
-            message: "Failed to create question",
-          });
-        }
-
-        const qIInsertable: typeof questionInfo.$inferInsert = {
-          id: iRQ.value.id,
-          questionId: iRQ.value.questionId ?? "",
-
-          title: input.title,
-          description: input.description,
-
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
-
-        const { data: insertedArray, error: insertError } = await tc(
-          db.insert(questionInfo).values(qIInsertable).returning(),
-        );
-        if (insertError) {
-          return err({
-            type: createErrorTypes.Failed,
-            message: "Failed to insert question",
-          });
-        }
-
-        const inserted = insertedArray ? insertedArray[0] : null;
-        if (!inserted) {
-          return err({
-            type: createErrorTypes.NotFound,
-            message: "Failed to insert question",
-          });
-        }
-
-        return ok(inserted);
       },
     ),
   true_false: protectedProcedure
     .input(createTrueFalseQuestionType)
     .mutation(
-      async ({
-        input,
-      }): Promise<
-        Result<typeof questionTrueFalse.$inferSelect, createError>
-      > => {
-        const tIA = await throwIfActive(input.wahlId);
-        if (tIA.isErr()) {
-          return err({
-            type: createErrorTypes.Disallowed,
-            message: "Wahl is active",
-          });
-        }
-
-        const iRQ = await insertableRootQuestion({
-          wahlId: input.wahlId,
-          type: "true_false",
+      async ({ input }): Promise<Result<typeof questionTrueFalse.$inferSelect, createError>> => {
+        return createQuestion({
+          input,
+          questionType: "true_false",
+          buildInsertable: (rootQuestion, input) => {
+            const insertable: typeof questionTrueFalse.$inferInsert = {
+              id: rootQuestion.id,
+              questionId: rootQuestion.questionId ?? "",
+              title: input.title,
+              description: input.description,
+              o1Id: randomUUID(),
+              o1Title: input.content.option1.title,
+              o1Description: input.content.option1.description,
+              o1Correct: input.content.option1.correct,
+              o1Colour: input.content.option1.colour,
+              o2Id: randomUUID(),
+              o2Title: input.content.option2.title,
+              o2Description: input.content.option2.description,
+              o2Correct: input.content.option2.correct,
+              o2Colour: input.content.option2.colour,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            };
+            return insertable;
+          },
+          table: {
+            insert: (values) => ({
+              returning: () => db.insert(questionTrueFalse).values(values).returning(),
+            }),
+          },
         });
-        if (iRQ.isErr()) {
-          return err({
-            type: createErrorTypes.Failed,
-            message: "Failed to create question",
-          });
-        }
-
-        const qInsertable: typeof questionTrueFalse.$inferInsert = {
-          id: iRQ.value.id,
-          questionId: iRQ.value.questionId ?? "",
-          title: input.title,
-          description: input.description,
-
-          o1Id: randomUUID(),
-          o1Title: input.content.option1.title,
-          o1Description: input.content.option1.description,
-          o1Correct: input.content.option1.correct,
-          o1Colour: input.content.option1.colour,
-
-          o2Id: randomUUID(),
-          o2Title: input.content.option2.title,
-          o2Description: input.content.option2.description,
-          o2Correct: input.content.option2.correct,
-          o2Colour: input.content.option2.colour,
-
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
-
-        const { data: insertedArray, error: insertError } = await tc(
-          db.insert(questionTrueFalse).values(qInsertable).returning(),
-        );
-        if (insertError) {
-          return err({
-            type: createErrorTypes.Failed,
-            message: "Failed to insert question",
-          });
-        }
-
-        const inserted = insertedArray ? insertedArray[0] : null;
-        if (!inserted) {
-          return err({
-            type: createErrorTypes.NotFound,
-            message: "Failed to insert question",
-          });
-        }
-
-        return ok(inserted);
       },
     ),
   multiple_choice: protectedProcedure
     .input(createMultipleChoiceQuestionType)
     .mutation(
-      async ({
-        input,
-      }): Promise<
-        Result<typeof questionMultipleChoice.$inferSelect, createError>
-      > => {
-        const tIA = await throwIfActive(input.wahlId);
-        if (tIA.isErr()) {
-          return err({
-            type: createErrorTypes.Disallowed,
-            message: "Wahl is active",
-          });
-        }
-
-        const iRQ = await insertableRootQuestion({
-          wahlId: input.wahlId,
-          type: "multiple_choice",
+      async ({ input }): Promise<Result<typeof questionMultipleChoice.$inferSelect, createError>> => {
+        return createQuestion({
+          input,
+          questionType: "multiple_choice",
+          buildInsertable: (rootQuestion, input) => {
+            const insertable: typeof questionMultipleChoice.$inferInsert = {
+              id: rootQuestion.id,
+              questionId: rootQuestion.questionId ?? "",
+              title: input.title,
+              description: input.description,
+              content: input.content.map((item) => ({
+                id: randomUUID(),
+                title: item.title,
+                description: item.description,
+                correct: item.correct,
+                colour: item.colour,
+              })),
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            };
+            return insertable;
+          },
+          table: {
+            insert: (values) => ({
+              returning: () => db.insert(questionMultipleChoice).values(values).returning(),
+            }),
+          },
         });
-        if (iRQ.isErr()) {
-          return err({
-            type: createErrorTypes.Failed,
-            message: "Failed to create question",
-          });
-        }
-
-        const qInsertable: typeof questionMultipleChoice.$inferInsert = {
-          id: iRQ.value.id,
-          questionId: iRQ.value.questionId ?? "",
-          title: input.title,
-          description: input.description,
-
-          content: input.content.map((item) => ({
-            id: randomUUID(),
-            title: item.title,
-            description: item.description,
-            correct: item.correct,
-            colour: item.colour,
-          })),
-
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
-
-        const { data: insertedArray, error: insertError } = await tc(
-          db.insert(questionMultipleChoice).values(qInsertable).returning(),
-        );
-        if (insertError) {
-          return err({
-            type: createErrorTypes.Failed,
-            message: "Failed to insert question",
-          });
-        }
-
-        const inserted = insertedArray ? insertedArray[0] : null;
-        if (!inserted) {
-          return err({
-            type: createErrorTypes.NotFound,
-            message: "Failed to insert question",
-          });
-        }
-
-        return ok(inserted);
       },
     ),
 });
+
