@@ -92,7 +92,10 @@ export const wahlenRouter = createTRPCRouter({
 
         const response = insertableResponse[0] ? insertableResponse[0] : null;
         if (!response) {
-          throw new Error("Failed to create wahl");
+          return err({
+            type: wahlErrorTypes.Failed,
+            message: "Failed to create wahl",
+          });
         }
 
         return ok(response);
@@ -141,15 +144,6 @@ export const wahlenRouter = createTRPCRouter({
         createdAt: data.createdAt,
         updatedAt: input.updatedAt ?? data.updatedAt,
       };
-
-      // const response = await db
-      //   .update(wahlen)
-      //   .set(insertable)
-      //   .where(eq(wahlen.id, input.id))
-      //   .returning();
-      // if (!response[0]) {
-      //   throw new Error("Failed to update wahl");
-      // }
 
       const { data: insertableResponse, error: insertableError } = await tc(
         db.update(wahlen).set(insertable).where(eq(wahlen.id, input.id)).returning(),

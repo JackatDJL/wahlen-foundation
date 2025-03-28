@@ -13,22 +13,25 @@ type InputData = inferRouterInputs<AppRouter>["files"]["create"];
 const f = createUploadthing();
 
 import { auth } from "@clerk/nextjs/server";
+import { err, Result } from "neverthrow";
+import { createFileError, createFileReturnTypes } from "~/server/api/routers/files";
 
-async function createFile({ input }: { input: InputData }) {
+async function createFile({ input }: { input: InputData }): Promise<Result<createFileReturnTypes, createFileError>> { 
   // console.log("Request to Server", input);
 
-  let response;
-  try {
-    response = await api.files.create(input);
-  } catch (error) {
-    console.error("Error creating file:", error);
-    throw error;
+  const response = await api.files.create(input)
+  if (response.isErr()) {
+    return err({
+      type: response.error.type,
+      message: response.error.message,
+    });
   }
+
   console.log(
-    "Server asigned UUID ",
-    response?.file?.id,
+    "Server assigned UUID ",
+    response.value.file.id,
     " to ",
-    response.file.ufsKey,
+    response.value.file.ufsKey,
   );
 
   return response;
@@ -50,20 +53,18 @@ export const UploadthingRouter = {
       }),
     )
     .middleware(async ({ req, input }) => {
-      const Auth = auth();
+      const Auth = await auth();
       // console.log("Auth: ", Auth);
-      if (!(await Auth).userId) throw new UploadThingError("Unauthorized");
+      if (Auth.userId) throw new UploadThingError("Unauthorized"); // THIS IS ALLOWED!!!
 
       return {
-        userId: (await Auth).userId,
+        userId: Auth.userId,
         questionId: input.questionId,
         answerId: input.answerId,
         fileType: input.fileType,
       };
     })
     .onUploadComplete(async ({ metadata, file }) => {
-      // console.log("Uploaded ", file.name, " for ", metadata.owner);
-      // console.log(metadata.presentationId, ".presentation = ", file.key);
 
       const request: InputData = {
         name: file.name,
@@ -81,8 +82,10 @@ export const UploadthingRouter = {
       };
 
       const response = await createFile({ input: request });
-
-      return { id: response?.file?.id, success: true };
+      if (response.isErr()) {
+        console.error("Error creating file: ", response.error.message);
+        throw new UploadThingError("Failed to create file");
+      }
     }),
 } satisfies FileRouter;
 

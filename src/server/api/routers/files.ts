@@ -20,6 +20,7 @@ import { utapi } from "~/server/uploadthing";
 import crypto from "crypto";
 import { err, ok, type Result } from "neverthrow";
 import { tc } from "~/lib/tryCatch";
+import { throwIfActive } from "./questions/delete";
 
 const setInternalQuestionFileType = z.object({
   type: z.enum(["info", "true_false", "multiple_choice"]),
@@ -748,17 +749,18 @@ const createFileType = z.object({
   owner: z.string().length(32),
 });
 
-type createFileReturnTypes = {
+export type createFileReturnTypes = {
   file: typeof files.$inferSelect;
   question: setInternalQuestionFileReturnTypes;
 };
 
-enum createFileErrorTypes {
+export enum createFileErrorTypes {
   NotFound = "NotFound",
   UpdateFailed = "UpdateFailed",
+  Disallowed = "Disallowed",
 }
 
-type createFileError = {
+export type createFileError = {
   type: createFileErrorTypes;
   message: string;
 };
@@ -797,6 +799,13 @@ export const fileRouter = createTRPCRouter({
       async ({
         input,
       }): Promise<Result<createFileReturnTypes, createFileError>> => {
+        const tIA = await throwIfActive(input.questionId);
+        if (tIA.isErr()) {
+          return err({
+            type: createFileErrorTypes.Disallowed,
+            message: "Question is currently active",
+          });
+        }
         const { data: wahlArray, error: wahlError } = await tc(
           db.select().from(questions).where(eq(questions.id, input.questionId)),
         );
