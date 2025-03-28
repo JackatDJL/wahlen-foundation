@@ -16,7 +16,7 @@ import { tc } from "~/lib/tryCatch";
 
 const uuidType = z.string().uuid();
 // Generic helper for creating questions of any type
-async function createQuestion <TTable, TInput, TOutput>({
+async function createQuestion<TTable, TInput, TOutput>({
   input,
   questionType,
   buildInsertable,
@@ -24,12 +24,17 @@ async function createQuestion <TTable, TInput, TOutput>({
 }: {
   input: TInput;
   questionType: "info" | "true_false" | "multiple_choice";
-  buildInsertable: (rootQuestion: typeof questions.$inferSelect, input: TInput) => TTable;
-  table: { insert: (values: TTable) => { returning: () => Promise<TOutput[]> } };
+  buildInsertable: (
+    rootQuestion: typeof questions.$inferSelect,
+    input: TInput,
+  ) => TTable;
+  table: {
+    insert: (values: TTable) => { returning: () => Promise<TOutput[]> };
+  };
 }): Promise<Result<TOutput, createError>> {
   // Get wahlId from input (all input types have wahlId)
   const wahlId = (input as unknown as { wahlId: string }).wahlId;
-  
+
   // Check if Wahl is active
   const tIA = await throwIfActive(wahlId);
   if (tIA.isErr()) {
@@ -76,7 +81,6 @@ async function createQuestion <TTable, TInput, TOutput>({
 
   return ok(inserted);
 }
-
 
 const IRQType = z.object({
   wahlId: uuidType,
@@ -224,7 +228,9 @@ export const creationRouter = createTRPCRouter({
   info: protectedProcedure
     .input(createInfoQuestionType)
     .mutation(
-      async ({ input }): Promise <Result<typeof questionInfo.$inferSelect, createError>> => {
+      async ({
+        input,
+      }): Promise<Result<typeof questionInfo.$inferSelect, createError>> => {
         return createQuestion({
           input,
           questionType: "info",
@@ -241,7 +247,8 @@ export const creationRouter = createTRPCRouter({
           },
           table: {
             insert: (values) => ({
-              returning: () => db.insert(questionInfo).values(values).returning(),
+              returning: () =>
+                db.insert(questionInfo).values(values).returning(),
             }),
           },
         });
@@ -250,7 +257,11 @@ export const creationRouter = createTRPCRouter({
   true_false: protectedProcedure
     .input(createTrueFalseQuestionType)
     .mutation(
-      async ({ input }): Promise<Result<typeof questionTrueFalse.$inferSelect, createError>> => {
+      async ({
+        input,
+      }): Promise<
+        Result<typeof questionTrueFalse.$inferSelect, createError>
+      > => {
         return createQuestion({
           input,
           questionType: "true_false",
@@ -277,7 +288,8 @@ export const creationRouter = createTRPCRouter({
           },
           table: {
             insert: (values) => ({
-              returning: () => db.insert(questionTrueFalse).values(values).returning(),
+              returning: () =>
+                db.insert(questionTrueFalse).values(values).returning(),
             }),
           },
         });
@@ -286,7 +298,11 @@ export const creationRouter = createTRPCRouter({
   multiple_choice: protectedProcedure
     .input(createMultipleChoiceQuestionType)
     .mutation(
-      async ({ input }): Promise<Result<typeof questionMultipleChoice.$inferSelect, createError>> => {
+      async ({
+        input,
+      }): Promise<
+        Result<typeof questionMultipleChoice.$inferSelect, createError>
+      > => {
         return createQuestion({
           input,
           questionType: "multiple_choice",
@@ -310,11 +326,11 @@ export const creationRouter = createTRPCRouter({
           },
           table: {
             insert: (values) => ({
-              returning: () => db.insert(questionMultipleChoice).values(values).returning(),
+              returning: () =>
+                db.insert(questionMultipleChoice).values(values).returning(),
             }),
           },
         });
       },
     ),
 });
-

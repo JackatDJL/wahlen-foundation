@@ -13,13 +13,20 @@ type InputData = inferRouterInputs<AppRouter>["files"]["create"];
 const f = createUploadthing();
 
 import { auth } from "@clerk/nextjs/server";
-import { err, Result } from "neverthrow";
-import { createFileError, createFileReturnTypes } from "~/server/api/routers/files";
+import { err, type Result } from "neverthrow";
+import type {
+  createFileError,
+  createFileReturnTypes,
+} from "~/server/api/routers/files";
 
-async function createFile({ input }: { input: InputData }): Promise<Result<createFileReturnTypes, createFileError>> { 
+async function createFile({
+  input,
+}: {
+  input: InputData;
+}): Promise<Result<createFileReturnTypes, createFileError>> {
   // console.log("Request to Server", input);
 
-  const response = await api.files.create(input)
+  const response = await api.files.create(input);
   if (response.isErr()) {
     return err({
       type: response.error.type,
@@ -65,7 +72,6 @@ export const UploadthingRouter = {
       };
     })
     .onUploadComplete(async ({ metadata, file }) => {
-
       const request: InputData = {
         name: file.name,
         fileType: metadata.fileType,

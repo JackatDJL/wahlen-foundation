@@ -436,7 +436,7 @@ export const deletionRouter = createTRPCRouter({
         }
       }
 
-      const { data: delInternalArray, error: dbError2 } = await tc(
+      const { error: dbError2 } = await tc(
         db
           .delete(questionMultipleChoice)
           .where(eq(questionMultipleChoice.id, response.id))
