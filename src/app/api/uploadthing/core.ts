@@ -84,7 +84,7 @@ export const UploadthingRouter = {
         questionId: metadata.questionId,
         answerId: metadata.answerId,
 
-        owner: metadata.userId!,
+        owner: metadata.userId,
       };
 
       const response = await createFile({ input: request });
