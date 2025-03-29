@@ -17,7 +17,7 @@ import { Toaster } from "~/components/ui/sonner";
 import { dark } from "@clerk/themes";
 import { PostHogProvider } from "~/server/providers";
 import { env } from "~/env";
-
+ 
 // Implement Metadata Images TODO
 export const metadata: Metadata = {
   title: "The Wahlen Foundation - by DJL",
@@ -95,6 +95,7 @@ export const metadata: Metadata = {
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  const dev = env.NODE_ENV === "development";
   return (
     <ClerkProvider
       appearance={{
