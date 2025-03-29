@@ -95,7 +95,6 @@ export const metadata: Metadata = {
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const dev = env.NODE_ENV === "development";
   return (
     <ClerkProvider
       appearance={{
