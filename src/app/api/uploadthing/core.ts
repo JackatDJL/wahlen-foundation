@@ -13,22 +13,42 @@ type InputData = inferRouterInputs<AppRouter>["files"]["create"];
 const f = createUploadthing();
 
 import { auth } from "@clerk/nextjs/server";
+import { err, type Result } from "neverthrow";
+import type {
+  createFileError,
+  createFileReturnTypes,
+} from "~/server/api/routers/files";
 
-async function createFile({ input }: { input: InputData }) {
+/**
+ * Creates a file record by sending the provided input to the API.
+ *
+ * This asynchronous function invokes the backend API with the given file creation data.
+ * It returns a structured result that contains the file details on success or error information on failure.
+ * In case of success, it logs the server-assigned UUID and file key.
+ *
+ * @param input - The file creation parameters.
+ * @returns A promise that resolves to a Result containing either the newly created file details or error metadata.
+ */
+async function createFile({
+  input,
+}: {
+  input: InputData;
+}): Promise<Result<createFileReturnTypes, createFileError>> {
   // console.log("Request to Server", input);
 
-  let response;
-  try {
-    response = await api.files.create(input);
-  } catch (error) {
-    console.error("Error creating file:", error);
-    throw error;
+  const response = await api.files.create(input);
+  if (response.isErr()) {
+    return err({
+      type: response.error.type,
+      message: response.error.message,
+    });
   }
+
   console.log(
-    "Server asigned UUID ",
-    response?.file?.id,
+    "Server assigned UUID ",
+    response.value.file.id,
     " to ",
-    response.file.ufsKey,
+    response.value.file.ufsKey,
   );
 
   return response;
@@ -50,21 +70,18 @@ export const UploadthingRouter = {
       }),
     )
     .middleware(async ({ req, input }) => {
-      const Auth = auth();
+      const Auth = await auth();
       // console.log("Auth: ", Auth);
-      if (!(await Auth).userId) throw new UploadThingError("Unauthorized");
+      if (!Auth.userId) throw new UploadThingError("Unauthorized"); // THIS IS ALLOWED!!!
 
       return {
-        userId: (await Auth).userId,
+        userId: Auth.userId,
         questionId: input.questionId,
         answerId: input.answerId,
         fileType: input.fileType,
       };
     })
     .onUploadComplete(async ({ metadata, file }) => {
-      // console.log("Uploaded ", file.name, " for ", metadata.owner);
-      // console.log(metadata.presentationId, ".presentation = ", file.key);
-
       const request: InputData = {
         name: file.name,
         fileType: metadata.fileType,
@@ -77,12 +94,14 @@ export const UploadthingRouter = {
         questionId: metadata.questionId,
         answerId: metadata.answerId,
 
-        owner: metadata.userId!,
+        owner: metadata.userId,
       };
 
       const response = await createFile({ input: request });
-
-      return { id: response?.file?.id, success: true };
+      if (response.isErr()) {
+        console.error("Error creating file: ", response.error.message);
+        throw new UploadThingError("Failed to create file");
+      }
     }),
 } satisfies FileRouter;
 

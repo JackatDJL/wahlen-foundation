@@ -36,6 +36,13 @@ export type RouterInputs = inferRouterInputs<AppRouter>;
  */
 export type RouterOutputs = inferRouterOutputs<AppRouter>;
 
+/**
+ * Wraps components with TRPC and React Query providers.
+ *
+ * This component initializes a TRPC client with preconfigured links for development logging and HTTP batch streaming,
+ * then supplies both the TRPC client and a shared QueryClient to its children via the appropriate context providers.
+ * This enables seamless integration of TRPC procedures and efficient data fetching across the application.
+ */
 export function TRPCReactProvider(props: { children: React.ReactNode }) {
   const queryClient = getQueryClient();
 
@@ -57,7 +64,7 @@ export function TRPCReactProvider(props: { children: React.ReactNode }) {
           },
         }),
       ],
-    })
+    }),
   );
 
   return (
