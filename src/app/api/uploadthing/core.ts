@@ -62,7 +62,7 @@ export const UploadthingRouter = {
     .middleware(async ({ req, input }) => {
       const Auth = await auth();
       // console.log("Auth: ", Auth);
-      if (Auth.userId) throw new UploadThingError("Unauthorized"); // THIS IS ALLOWED!!!
+      if (!Auth.userId) throw new UploadThingError("Unauthorized"); // THIS IS ALLOWED!!!
 
       return {
         userId: Auth.userId,
