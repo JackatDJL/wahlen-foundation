@@ -55,19 +55,25 @@ type setInternalQuestionFileError =
     };
 
 /**
- * Points an Answer or Question to a file in the system.
+ * Associates a file with a question or its answer.
  *
- * This function updates the corresponding question record so that it points to a given file.
- * Depending on the question type ("info", "true_false", or "multiple_choice"), it performs
- * different database update operations.
+ * The function validates its input against a Zod schema and updates the appropriate database record based on the question type:
+ * - For "info" questions, it sets the file as the question's image.
+ * - For "true_false" questions, it determines which option to update (o1Image or o2Image) based on the provided answerId.
+ * - For "multiple_choice" questions, it updates the image property for the matching answer within the content array.
  *
- * @param params - An object containing the following properties:
- *   @param params.type - The type of question ("info", "true_false", or "multiple_choice").
- *   @param params.questionId - The UUID of the question.
- *   @param params.answerId - The UUID of the answer.
- *   @param params.fileId - The UUID of the file, or null if no file should be pointed to.
- * @returns A Promise that resolves with a Result. The Result contains either the updated question record
- *          (of a type inferred from questionInfo, questionTrueFalse, or questionMultipleChoice), or an error.
+ * @param params - An object containing:
+ *   - type: The question type ("info", "true_false", or "multiple_choice").
+ *   - questionId: The UUID of the question.
+ *   - answerId: The UUID of the answer to update.
+ *   - fileId: The UUID of the file to associate, or null to remove the association.
+ * @returns A Promise that resolves to a Result containing either the updated question record or an error that indicates:
+ *   - Input validation failure.
+ *   - A database update error.
+ *   - A not found condition for the question or answer.
+ *
+ * @remarks
+ * This function employs functional error handling with the `Result` type from the neverthrow library, returning errors rather than throwing exceptions.
  */
 async function setInternalQuestionFile({
   type,
@@ -325,7 +331,19 @@ type deleteInternalQuestionFileError =
     };
 
 /**
- * To Be Updated
+ * Removes the file reference from a question record.
+ *
+ * This function validates the input parameters using Zod and updates the corresponding question record in the database
+ * based on its type. For "info" questions, it clears the image field; for "true_false" questions, it clears the image
+ * for the appropriate answer option; and for "multiple_choice" questions, it clears the image within the answer's content.
+ * The operation returns a {@link Result} that encapsulates either the updated question record or an error indicating
+ * whether the input was invalid, the question or answer was not found, or the update failed.
+ *
+ * @param param0 - Object containing:
+ *   - questionId: The unique identifier of the question.
+ *   - answerId: The unique identifier of the answer whose file reference should be removed.
+ *
+ * @returns A {@link Result} with the updated question record on success or an error detailing the failure reason.
  */
 async function removeInternalQuestionFile({
   questionId,
@@ -575,6 +593,21 @@ type deleteByIdError =
       zodError: z.ZodError;
     };
 
+/**
+ * Deletes a file identified by its UUID, removing both its storage record and associated question reference.
+ *
+ * The function begins by validating the input against the expected UUID format and retrieving the corresponding file
+ * record from the database. It then checks the file's transfer status:
+ * - If the file is "in progress," deletion is aborted.
+ * - If the file is "queued," the status is updated to "idle" before proceeding.
+ *
+ * Depending on the storage provider (UTFS or blob), it executes the appropriate deletion operation using the provider's
+ * identifier (ufsKey for UTFS or blobPath for blob). After successfully deleting the file from external storage, it
+ * removes the file reference from the associated question and deletes the file record from the database.
+ *
+ * @param input - A UUID identifying the file to delete.
+ * @returns A result indicating successful deletion or detailing why the deletion failed.
+ */
 export async function deleteById(
   input: z.infer<typeof uuidType>,
 ): Promise<Result<void, deleteByIdError>> {

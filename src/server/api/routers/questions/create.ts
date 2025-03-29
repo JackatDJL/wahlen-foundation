@@ -15,7 +15,17 @@ import { err, ok, type Result } from "neverthrow";
 import { tc } from "~/lib/tryCatch";
 
 const uuidType = z.string().uuid();
-// Generic helper for creating questions of any type
+/**
+ * Creates a question record of a specified type and inserts it into the database.
+ *
+ * This generic helper ensures the associated election (identified by the input's `wahlId`) is inactive, creates a root question record, and transforms it into a type-specific insertable object via the provided callback. It then attempts to persist the question, returning a neverthrow Result that contains the inserted record on success or an error detail if creation fails.
+ *
+ * @param input - Data for creating the question, which must include a `wahlId` property.
+ * @param questionType - The type of question to create; one of "info", "true_false", or "multiple_choice".
+ * @param buildInsertable - Callback that builds an insertable object from the root question and the input data.
+ * @param table - An interface for the database table exposing an `insert` method with a `returning` function to persist and retrieve the inserted record.
+ * @returns A promise resolving to a Result containing the inserted question record or an error of type createError.
+ */
 async function createQuestion<TTable, TInput, TOutput>({
   input,
   questionType,
@@ -105,6 +115,19 @@ type IRQError =
       error: z.ZodError;
     };
 
+/**
+ * Inserts a new root question record into the database.
+ *
+ * Before insertion, the function verifies that the election (identified by `wahlId`) is not active, then
+ * validates the input using a Zod schema. It constructs a question record with generated UUIDs for its unique
+ * identifiers and current timestamps, and attempts to insert it into the database. The function returns a Result
+ * wrapping the inserted question on success or an error object detailing the type of failure encountered.
+ *
+ * @param options - An object containing:
+ *  - `wahlId`: The election identifier used to check if the election is active.
+ *  - `type`: The type of question (e.g., "info", "true_false", or "multiple_choice") determining validation constraints.
+ * @returns A Result containing the inserted question record on success, or an error object on failure.
+ */
 export async function insertableRootQuestion({
   wahlId,
   type,

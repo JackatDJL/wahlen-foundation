@@ -37,6 +37,16 @@ type UpdateDateOnQuestionError =
       zodError: z.ZodError;
     };
 
+/**
+ * Updates the "updatedAt" timestamp for a question identified by its UUID.
+ *
+ * The function validates the provided question ID using a UUID schema. If the validation fails, it returns an error result indicating an input type error.
+ * On successful validation, it attempts to update the question’s "updatedAt" field to the current time.
+ * If the update fails or no matching question is found, an error result with an update failure type is returned.
+ *
+ * @param questionId - The UUID of the question to update.
+ * @returns A promise that resolves to a Result containing the updated question data on success, or an UpdateDateOnQuestionError on failure.
+ */
 export async function setUpdateDateOnQuestion(
   questionId: z.infer<typeof uuidType>,
 ): Promise<Result<typeof questions.$inferSelect, UpdateDateOnQuestionError>> {
