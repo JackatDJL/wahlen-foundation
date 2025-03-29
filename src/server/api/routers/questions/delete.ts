@@ -37,6 +37,18 @@ type throwIfActiveError =
       zodError: z.ZodError;
     };
 
+/**
+ * Validates the provided UUID and ensures the associated question or election is not active.
+ *
+ * This function first uses a schema to confirm that the given UUID is valid. It then attempts to retrieve
+ * the corresponding question from the database. If a question is found, the linked election is queried
+ * using the question's election identifier. If either the question or election is missing, or if the election’s
+ * status is active (i.e., not "draft", "queued", or "inactive"), the function returns an error Result with
+ * a specific error type. Otherwise, it returns a successful Result, indicating that the election is editable.
+ *
+ * @param id - The UUID identifying a question or election.
+ * @returns A Result signifying success if the election is non-active, or an error Result detailing the failure reason.
+ */
 export async function throwIfActive(
   id: z.infer<typeof uuidType>,
 ): Promise<Result<void, throwIfActiveError>> {
@@ -138,6 +150,18 @@ type deleteRootQuestionError =
       zodError: z.ZodError;
     };
 
+/**
+ * Deletes a root question from the database by matching its ID or its associated questionId.
+ *
+ * This function first validates the provided UUID. It then attempts to delete the question record from the database.
+ * If the UUID is invalid, if no matching question is found, or if the deletion operation fails, the function
+ * returns an error result with a specific error type from deleteRootQuestionErrorTypes.
+ *
+ * @param id - A valid UUID used to identify the question to delete. The function checks both the question's primary ID
+ *             and its related questionId.
+ * @returns A Promise that resolves to a Result containing the deleted question record on success, or an error object
+ *          detailing the failure reason.
+ */
 export async function deleteRootQuestion(
   id: z.infer<typeof uuidType>,
 ): Promise<Result<typeof questions.$inferSelect, deleteRootQuestionError>> {

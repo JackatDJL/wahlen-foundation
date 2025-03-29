@@ -19,6 +19,16 @@ import type {
   createFileReturnTypes,
 } from "~/server/api/routers/files";
 
+/**
+ * Creates a file record by sending the provided input to the API.
+ *
+ * This asynchronous function invokes the backend API with the given file creation data.
+ * It returns a structured result that contains the file details on success or error information on failure.
+ * In case of success, it logs the server-assigned UUID and file key.
+ *
+ * @param input - The file creation parameters.
+ * @returns A promise that resolves to a Result containing either the newly created file details or error metadata.
+ */
 async function createFile({
   input,
 }: {
