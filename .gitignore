@@ -44,3 +44,6 @@ yarn-error.log*
 
 # idea files
 .idea
+
+# My function that generates ai Context
+context.txt
