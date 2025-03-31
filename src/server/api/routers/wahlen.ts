@@ -44,23 +44,9 @@ const createWahlType = z.object({
 const editWahlType = z.object({
   id: z.string().uuid(),
   shortname: z.string().min(3).max(25).optional(),
-  status: z
-    .enum([
-      "draft",
-      "queued",
-      "active",
-      "inactive",
-      "completed",
-      "results",
-      "archived",
-    ])
-    .optional(),
 
   title: z.string().min(3).max(256).optional(),
   description: z.string().optional(),
-
-  startDate: z.date().optional(),
-  endDate: z.date().optional(),
 });
 
 const queueWahlType = z.object({
@@ -69,6 +55,8 @@ const queueWahlType = z.object({
   startDate: z.date(),
   endDate: z.date().optional(),
 });
+
+const reDraftWahlType = z.string().uuid();
 
 const cronWahlType = null;
 
@@ -146,22 +134,22 @@ export const wahlenRouter = createTRPCRouter({
         const insertable: typeof wahlen.$inferInsert = {
           id: input.id,
           shortname: input.shortname ?? data.shortname,
-          status: input.status ?? data.status,
+          status: data.status,
 
-          alert: input.alert ?? data.alert,
-          alertMessage: input.alertMessage ?? data.alertMessage,
+          alert: data.alert,
+          alertMessage: data.alertMessage,
 
           title: input.title ?? data.title,
           description: input.description ?? data.description,
 
-          owner: input.owner ?? data.owner,
+          owner: data.owner,
 
-          startDate: input.startDate ?? data.startDate,
-          endDate: input.endDate ?? data.endDate,
-          archiveDate: input.archiveDate ?? data.archiveDate,
+          startDate: data.startDate,
+          endDate: data.endDate,
+          archiveDate: data.archiveDate,
 
           createdAt: data.createdAt,
-          updatedAt: input.updatedAt ?? data.updatedAt,
+          updatedAt: new Date(),
         };
 
         const { data: insertableResponse, error: insertableError } = await tc(
@@ -189,5 +177,44 @@ export const wahlenRouter = createTRPCRouter({
         return ok(response);
       },
     ),
-  getByShortname: publicProcedure.query(() => ""),
+  queue: protectedProcedure
+    .input(queueWahlType)
+    .mutation(
+      async ({
+        input,
+      }): Promise<Result<typeof wahlen.$inferSelect, wahlError>> => {
+        const { data: resArray, error: dbError } = await tc(
+          db
+            .update(wahlen)
+            .set({
+              status: "queued",
+
+              startDate: input.startDate,
+              endDate: input.endDate,
+
+              updatedAt: new Date(),
+            })
+            .where(eq(wahlen.id, input.id))
+            .returning(),
+        );
+        if (dbError) {
+          return err({
+            type: wahlErrorTypes.Failed,
+            message: dbError.message,
+          });
+        }
+        const res = resArray[0] ?? null;
+        if (!res) {
+          return err({
+            type: wahlErrorTypes.Failed,
+            message: "Failed to queue wahl",
+          });
+        }
+        return ok(res);
+      },
+    ),
+
+  cron: createTRPCRouter({
+    run: protectedProcedure.mutation(() => " "),
+  }),
 });
