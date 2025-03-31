@@ -12,7 +12,7 @@ import { eq } from "drizzle-orm";
 import { type Result, err, ok } from "neverthrow";
 import { tc } from "~/lib/tryCatch";
 
-const createWahlType = z.object({
+const draftWahlType = z.object({
   shortname: z.string().min(3).max(25),
 
   title: z.string().min(3).max(256),
@@ -47,20 +47,18 @@ const editWahlType = z.object({
     ])
     .optional(),
 
-  alert: z.enum(["card", "info", "warning", "error"]).optional(),
-  alertMessage: z.string().optional(),
-
   title: z.string().min(3).max(256).optional(),
   description: z.string().optional(),
-
-  owner: z.string().length(32).optional(),
 
   startDate: z.date().optional(),
   endDate: z.date().optional(),
   archiveDate: z.date().optional(),
+})
 
-  updatedAt: z.date().optional(),
-});
+const queueWahlType = null
+
+const 
+
 
 export const wahlenRouter = createTRPCRouter({
   create: protectedProcedure
