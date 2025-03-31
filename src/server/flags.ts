@@ -10,6 +10,7 @@ const identify = dedupe(() => {
 export const earlyAccessFlag = flag({
   key: "early-access",
   identify,
+  defaultValue: false,
   decide() {
     return !!posthog.isFeatureEnabled("early-access");
   },

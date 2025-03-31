@@ -5,7 +5,7 @@
 import "./src/env.js";
 
 /** @type {import("next").NextConfig} */
-const config = {
+const nextConfig = {
   async rewrites() {
     return [
       {
@@ -15,7 +15,6 @@ const config = {
     ];
   },
   skipTrailingSlashRedirect: true,
-
   images: {
     remotePatterns: [
       {
@@ -32,4 +31,8 @@ const config = {
   },
 };
 
-export default config
+import withVercelToolbar from "@vercel/toolbar/plugins/next";
+
+const config = withVercelToolbar()(nextConfig); // Das Soll so / mein got ich musste die Types absuchen für diese Scheiße
+
+export default config;

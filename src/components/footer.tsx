@@ -2,9 +2,11 @@
 
 import { motion } from "framer-motion";
 import Link from "next/link";
+import React from "react";
 import { GitHub, Mail, Navigation, Shield } from "react-feather";
 
 export default function Footer() {
+  const beta = process.env.NODE_ENV !== "production";
   return (
     <motion.footer
       className="border-t border-border bg-gradient-to-r from-primary/10 via-primary/5 to-secondary/10 py-8 print:bg-white print:text-black"
@@ -28,6 +30,20 @@ export default function Footer() {
               The new Digital Era.
             </p>
           </motion.div>
+
+          {beta && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.3 }}
+              className="flex items-center gap-2 rounded bg-yellow-100 px-3 py-1 text-yellow-800 shadow-md"
+            >
+              <span className="font-bold uppercase">Beta</span>
+              <span className="text-xs">
+                This is not public software — Confidential Beta Release.
+              </span>
+            </motion.div>
+          )}
 
           <motion.div
             className="flex items-center gap-6"
