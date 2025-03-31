@@ -36,6 +36,17 @@ const draftWahlType = z.object({
 const editWahlType = z.object({
   id: z.string().uuid(),
   shortname: z.string().min(3).max(25).optional(),
+  status: z
+    .enum([
+      "draft",
+      "queued",
+      "active",
+      "inactive",
+      "completed",
+      "results",
+      "archived",
+    ])
+    .optional(),
 
   title: z.string().min(3).max(256).optional(),
   description: z.string().optional(),
@@ -43,11 +54,6 @@ const editWahlType = z.object({
   startDate: z.date().optional(),
   endDate: z.date().optional(),
   archiveDate: z.date().optional(),
-});
-
-const alertType = z.object({
-  type: z.enum(["info", "warning", "error"]),
-  message: z.string().min(3).max(256).optional(),
 });
 
 const alertType = z.object({
