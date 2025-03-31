@@ -32,6 +32,15 @@ type wahlError = {
   message: string;
 };
 
+const createWahlType = z.object({
+  shortname: z.string().min(3).max(25),
+
+  title: z.string().min(3).max(256),
+  description: z.string().optional(),
+
+  owner: z.string().length(32),
+});
+
 const editWahlType = z.object({
   id: z.string().uuid(),
   shortname: z.string().min(3).max(25).optional(),
@@ -52,13 +61,26 @@ const editWahlType = z.object({
 
   startDate: z.date().optional(),
   endDate: z.date().optional(),
-  archiveDate: z.date().optional(),
-})
+});
 
-const queueWahlType = null
+const queueWahlType = z.object({
+  id: z.string().uuid(),
 
-const 
+  startDate: z.date(),
+  endDate: z.date().optional(),
+});
 
+const cronWahlType = null;
+
+const completeWahlType = z.string().uuid();
+
+const archiveWahlType = z.string().uuid();
+
+const getByShortnameType = z.string().uuid();
+
+const generateResultsType = z.string().uuid();
+
+const getResultsType = z.string().uuid();
 
 export const wahlenRouter = createTRPCRouter({
   create: protectedProcedure
