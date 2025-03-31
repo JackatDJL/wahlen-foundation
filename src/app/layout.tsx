@@ -17,7 +17,8 @@ import { Toaster } from "~/components/ui/sonner";
 import { dark } from "@clerk/themes";
 import { PostHogProvider } from "~/server/providers";
 import { env } from "~/env";
- 
+import { VercelToolbar } from "@vercel/toolbar/next";
+
 // Implement Metadata Images TODO
 export const metadata: Metadata = {
   title: "The Wahlen Foundation - by DJL",
@@ -95,6 +96,7 @@ export const metadata: Metadata = {
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  const shouldShowVercelToolbar = env.NODE_ENV === "development";
   return (
     <ClerkProvider
       appearance={{
@@ -120,6 +122,7 @@ export default function RootLayout({
                   <main className="flex-grow">{children}</main>
                   <Footer />
                 </div>
+                {shouldShowVercelToolbar && <VercelToolbar />}
               </ThemeProvider>
             </TRPCReactProvider>
           </PostHogProvider>
