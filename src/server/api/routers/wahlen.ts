@@ -50,16 +50,6 @@ const alertType = z.object({
   message: z.string().min(3).max(256).optional(),
 });
 
-const alertType = z.discriminatedUnion("type", [
-  z.object({
-    type: z.literal("alert"),
-    message: z.string().optional(),
-  }),
-  z.object({
-    type: z.literal("noAlert"),
-  }),
-]);
-
 const queueWahlType = z.object({
   id: z.string().uuid(),
 
