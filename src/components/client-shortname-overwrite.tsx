@@ -19,7 +19,7 @@ export default function ClientShortnameOverwrite() {
       }
     };
 
-    checkOverwrite();
+    void checkOverwrite();
   }, []);
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
