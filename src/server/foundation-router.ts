@@ -41,6 +41,7 @@ export async function getCurrentPath() {
 }
 
 const rootDomain = "wahlen.djl.foundation";
+const catchDomain = "wahl.djl.foundation";
 
 const catchPathsRegex = new RegExp(`^(\/|\/wahl\/.*)$`);
 
@@ -49,6 +50,7 @@ export async function handleRouting(
   string: boolean = false,
 ) {
   const headers = await getHeaders();
+  const path = await getCurrentPath();
   const dev = await devModeFlag();
   const shortname = await shortnameOverwrite();
 
@@ -72,6 +74,7 @@ export async function handleRouting(
 }
 
 export async function cleanup() {
+  const headers = await getHeaders();
   const path = await getCurrentPath();
   const dev = await devModeFlag();
   const shortname = await shortnameOverwrite();
