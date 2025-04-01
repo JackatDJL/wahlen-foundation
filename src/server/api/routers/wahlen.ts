@@ -5,6 +5,7 @@ import {
   createTRPCRouter,
   protectedProcedure,
   publicProcedure,
+  secureCronProcedure,
 } from "~/server/api/trpc";
 import { wahlen } from "~/server/db/schema";
 import { randomUUID } from "crypto";
@@ -126,7 +127,7 @@ export const wahlenRouter = createTRPCRouter({
         const data = dataArray[0] ?? null;
         if (!data) {
           return err({
-            type: wahlErrorTypes.Failed,
+            type: wahlErrorTypes.NotFound,
             message: "Wahl not found",
           });
         }
@@ -214,7 +215,147 @@ export const wahlenRouter = createTRPCRouter({
       },
     ),
 
+  reDraft: protectedProcedure
+    .input(reDraftWahlType)
+    .mutation(
+      async ({
+        input,
+      }): Promise<Result<typeof wahlen.$inferSelect, wahlError>> => {
+        const { data: resArray, error: dbError } = await tc(
+          db
+            .update(wahlen)
+            .set({
+              status: "draft",
+              updatedAt: new Date(),
+            })
+            .where(eq(wahlen.id, input))
+            .returning(),
+        );
+        if (dbError) {
+          return err({
+            type: wahlErrorTypes.Failed,
+            message: dbError.message,
+          });
+        }
+        const res = resArray[0] ?? null;
+        if (!res) {
+          return err({
+            type: wahlErrorTypes.Failed,
+            message: "Failed to re-draft wahl",
+          });
+        }
+        return ok(res);
+      },
+    ),
+
   cron: createTRPCRouter({
-    run: protectedProcedure.mutation(() => " "),
+    run: secureCronProcedure.mutation(() => " "),
   }),
+
+  complete: protectedProcedure
+    .input(completeWahlType)
+    .mutation(
+      async ({
+        input,
+      }): Promise<Result<typeof wahlen.$inferSelect, wahlError>> => {
+        const { data: resArray, error: dbError } = await tc(
+          db
+            .update(wahlen)
+            .set({
+              status: "completed",
+              updatedAt: new Date(),
+            })
+            .where(eq(wahlen.id, input))
+            .returning(),
+        );
+        if (dbError) {
+          return err({
+            type: wahlErrorTypes.Failed,
+            message: dbError.message,
+          });
+        }
+        const res = resArray[0] ?? null;
+        if (!res) {
+          return err({
+            type: wahlErrorTypes.Failed,
+            message: "Failed to complete wahl",
+          });
+        }
+        return ok(res);
+      },
+    ),
+
+  archive: protectedProcedure
+    .input(archiveWahlType)
+    .mutation(
+      async ({
+        input,
+      }): Promise<Result<typeof wahlen.$inferSelect, wahlError>> => {
+        const { data: resArray, error: dbError } = await tc(
+          db
+            .update(wahlen)
+            .set({
+              status: "archived",
+              updatedAt: new Date(),
+              archiveDate: new Date(),
+            })
+            .where(eq(wahlen.id, input))
+            .returning(),
+        );
+        if (dbError) {
+          return err({
+            type: wahlErrorTypes.Failed,
+            message: dbError.message,
+          });
+        }
+        const res = resArray[0] ?? null;
+        if (!res) {
+          return err({
+            type: wahlErrorTypes.Failed,
+            message: "Failed to archive wahl",
+          });
+        }
+        return ok(res);
+      },
+    ),
+
+  getByShortname: publicProcedure
+    .input(getByShortnameType)
+    .query(
+      async ({
+        input,
+      }): Promise<Result<typeof wahlen.$inferSelect, wahlError>> => {
+        const { data: resArray, error: dbError } = await tc(
+          db.select().from(wahlen).where(eq(wahlen.shortname, input)),
+        );
+        if (dbError) {
+          return err({
+            type: wahlErrorTypes.Failed,
+            message: dbError.message,
+          });
+        }
+        const res = resArray[0] ?? null;
+        if (!res) {
+          return err({
+            type: wahlErrorTypes.Failed,
+            message: "Wahl not found",
+          });
+        }
+        return ok(res);
+      },
+    ),
+
+  generateResults: protectedProcedure
+    .input(generateResultsType)
+    .mutation(async ({ input }): Promise<Result<string, wahlError>> => {
+      // Placeholder implementation
+      return ok("Results generated successfully");
+    }),
+
+  getResults: publicProcedure
+    .input(getResultsType)
+    .query(async ({ input }): Promise<Result<string, wahlError>> => {
+      // Placeholder implementation
+      return ok("Results retrieved successfully");
+    }),
 });
