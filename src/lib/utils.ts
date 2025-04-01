@@ -17,3 +17,22 @@ import { twMerge } from "tailwind-merge";
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
+
+export const forbiddenShortnames = [
+  "dev",
+  "test",
+  "staging",
+  "prod",
+  "production",
+  "development",
+  "testing",
+  "staging",
+  "clerk",
+  "auth",
+  "api",
+  "proxy",
+  "static",
+  "static-assets",
+  "vercel",
+  "vercel-assets",
+];
