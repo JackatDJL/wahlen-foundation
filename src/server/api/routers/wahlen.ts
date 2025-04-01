@@ -45,15 +45,10 @@ const editWahlType = z.object({
   archiveDate: z.date().optional(),
 });
 
-const alertType = z.discriminatedUnion("type", [
-  z.object({
-    type: z.literal("alert"),
-    message: z.string().optional(),
-  }),
-  z.object({
-    type: z.literal("noAlert"),
-  }),
-]);
+const alertType = z.object({
+  type: z.enum(["info", "warning", "error"]),
+  message: z.string().min(3).max(256).optional(),
+});
 
 const queueWahlType = z.object({
   id: z.string().uuid(),
