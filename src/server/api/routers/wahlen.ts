@@ -45,11 +45,6 @@ const editWahlType = z.object({
   archiveDate: z.date().optional(),
 });
 
-const alertType = z.object({
-  type: z.enum(["info", "warning", "error"]),
-  message: z.string().min(3).max(256).optional(),
-});
-
 const alertType = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("alert"),
