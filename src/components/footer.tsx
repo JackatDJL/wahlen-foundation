@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import Link from "next/link";
 import React from "react";
 import { GitHub, Mail, Navigation, Shield } from "react-feather";
+import ClientShortnameOverwrite from "./client-shortname-overwrite";
 
 export default function Footer() {
   const beta = process.env.NODE_ENV !== "production";
@@ -15,6 +16,9 @@ export default function Footer() {
       transition={{ duration: 0.5, delay: 0.2 }}
     >
       <div className="container mx-auto px-4">
+        <div className="flex flex-col items-center justify-between gap-4 md:flex-row">
+          <ClientShortnameOverwrite />
+        </div>
         <div className="flex flex-col items-center justify-between gap-4 md:flex-row">
           <motion.div
             initial={{ opacity: 0, y: 10 }}
