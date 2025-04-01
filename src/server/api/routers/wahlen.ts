@@ -13,15 +13,6 @@ import { eq } from "drizzle-orm";
 import { type Result, err, ok } from "neverthrow";
 import { tc } from "~/lib/tryCatch";
 
-const draftWahlType = z.object({
-  shortname: z.string().min(3).max(25),
-
-  title: z.string().min(3).max(256),
-  description: z.string().optional(),
-
-  owner: z.string().length(32),
-});
-
 enum wahlErrorTypes {
   Failed = "Failed",
   Disallowed = "Disallowed",
@@ -33,7 +24,7 @@ type wahlError = {
   message: string;
 };
 
-const createWahlType = z.object({
+const draftWahlType = z.object({
   shortname: z.string().min(3).max(25),
 
   title: z.string().min(3).max(256),
@@ -50,15 +41,10 @@ const editWahlType = z.object({
   description: z.string().optional(),
 });
 
-const alertType = z.discriminatedUnion("type", [
-  z.object({
-    type: z.literal("alert"),
-    message: z.string().optional(),
-  }),
-  z.object({
-    type: z.literal("noAlert"),
-  }),
-]);
+const alertType = z.object({
+  type: z.enum(["info", "warning", "error"]),
+  message: z.string().min(3).max(256).optional(),
+});
 
 const queueWahlType = z.object({
   id: z.string().uuid(),
@@ -82,8 +68,8 @@ const generateResultsType = z.string().uuid();
 const getResultsType = z.string().uuid();
 
 export const wahlenRouter = createTRPCRouter({
-  create: protectedProcedure
-    .input(createWahlType)
+  draft: protectedProcedure
+    .input(draftWahlType)
     .mutation(
       async ({
         input,
