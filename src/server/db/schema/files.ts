@@ -1,4 +1,5 @@
 import {
+  index,
   integer,
   pgSchema,
   text,
@@ -85,7 +86,7 @@ export const fileTransfer_types = fileSchema.enum("fileTransfer-types", [
  * - updatedAt: Timestamp of when the file was last updated
  */
 export const files = fileSchema.table(
-  "files", 
+  "files",
   {
     id: uuid("id").primaryKey().defaultRandom().unique(),
     name: text("name").notNull(),
@@ -98,7 +99,9 @@ export const files = fileSchema.table(
     url: text("url").notNull(),
 
     storedIn: fileStorage_types("stored_in").notNull().default("utfs"),
-    targetStorage: fileStorage_types("target_storage").notNull().default("blob"),
+    targetStorage: fileStorage_types("target_storage")
+      .notNull()
+      .default("blob"),
     transferStatus: fileTransfer_types("transfer_status")
       .notNull()
       .default("idle"),
@@ -119,7 +122,9 @@ export const files = fileSchema.table(
     wahlIdIdx: index("file_wahl_idx").on(table.wahlId),
     questionIdIdx: index("file_question_idx").on(table.questionId),
     fileTypeIdx: index("file_type_idx").on(table.fileType),
-    transferStatusIdx: index("file_transfer_status_idx").on(table.transferStatus),
+    transferStatusIdx: index("file_transfer_status_idx").on(
+      table.transferStatus,
+    ),
   }),
 );
 
