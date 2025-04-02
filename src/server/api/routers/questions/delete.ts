@@ -7,8 +7,8 @@ import {
   questionMultipleChoice,
   questions,
   questionTrueFalse,
-  wahlen,
-} from "~/server/db/schema";
+} from "~/server/db/schema/questions";
+import { wahlen } from "~/server/db/schema/wahlen";
 import { eq, or } from "drizzle-orm";
 import { deleteById } from "../files";
 import { deleteChunkProcedure } from "./delete-chunk";

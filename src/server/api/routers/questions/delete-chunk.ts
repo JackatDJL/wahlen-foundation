@@ -10,7 +10,7 @@ import {
   questionMultipleChoice,
   questions,
   questionTrueFalse,
-} from "~/server/db/schema";
+} from "~/server/db/schema/questions";
 import { eq, or } from "drizzle-orm";
 import { deleteById } from "../files";
 import { deleteRootQuestion } from "./delete";

@@ -7,7 +7,7 @@ import {
   questionInfo,
   questionMultipleChoice,
   questionTrueFalse,
-} from "~/server/db/schema";
+} from "~/server/db/schema/questions";
 import { deleteById } from "../files";
 import { randomUUID } from "crypto";
 import { err, ok, type Result } from "neverthrow";
