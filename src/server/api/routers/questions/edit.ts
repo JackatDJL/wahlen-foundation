@@ -3,11 +3,11 @@ import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
 import { editChunkProcedure } from "./edit-chunk";
 import {
-  questionInfo,
-  questionMultipleChoice,
   questions,
+  questionInfo,
   questionTrueFalse,
-} from "~/server/db/schema";
+  questionMultipleChoice,
+} from "~/server/db/schema/questions";
 import { eq, or } from "drizzle-orm";
 import { db } from "~/server/db";
 import { randomUUID } from "crypto";

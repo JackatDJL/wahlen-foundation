@@ -10,17 +10,17 @@ import {
 import { db } from "~/server/db";
 import { del, put } from "@vercel/blob";
 import {
-  files,
   questionInfo,
+  questionTrueFalse,
   questionMultipleChoice,
   questions,
-  questionTrueFalse,
-} from "~/server/db/schema";
+} from "~/server/db/schema/questions";
 import { utapi } from "~/server/uploadthing";
 import crypto from "crypto";
 import { err, ok, type Result } from "neverthrow";
 import { tc } from "~/lib/tryCatch";
 import { throwIfActive } from "./questions/delete";
+import { files } from "~/server/db/schema/files";
 
 const setInternalQuestionFileType = z.object({
   type: z.enum(["info", "true_false", "multiple_choice"]),
