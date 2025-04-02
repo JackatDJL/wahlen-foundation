@@ -1,14 +1,11 @@
 {
   "id": "f805c878-db95-4577-b464-6c6cf758175f",
-  "id": "f805c878-db95-4577-b464-6c6cf758175f",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
     "election.eligible": {
-    "election.eligible": {
       "name": "eligible",
-      "schema": "election",
       "schema": "election",
       "columns": {
         "id": {
@@ -32,8 +29,6 @@
         },
         "status": {
           "name": "status",
-          "type": "eligibility-status-type",
-          "typeSchema": "election",
           "type": "eligibility-status-type",
           "typeSchema": "election",
           "primaryKey": false,
@@ -98,6 +93,7 @@
           "name": "eligible_wahl_id_wahlen_id_fk",
           "tableFrom": "eligible",
           "tableTo": "wahlen",
+          "schemaTo": "wahlen",
           "schemaTo": "wahlen",
           "columnsFrom": [
             "wahl_id"
@@ -416,8 +412,303 @@
       }
     },
     "files.files": {
+    "election.sessions": {
+      "name": "sessions",
+      "schema": "election",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "wahl_id": {
+          "name": "wahl_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "eligible_id": {
+          "name": "eligible_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "publicKey": {
+          "name": "publicKey",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "session-status-type",
+          "typeSchema": "election",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "expires_on": {
+          "name": "expires_on",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "session_wahl_idx": {
+          "name": "session_wahl_idx",
+          "columns": [
+            {
+              "expression": "wahl_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "session_eligible_idx": {
+          "name": "session_eligible_idx",
+          "columns": [
+            {
+              "expression": "eligible_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "sessions_wahl_id_wahlen_id_fk": {
+          "name": "sessions_wahl_id_wahlen_id_fk",
+          "tableFrom": "sessions",
+          "tableTo": "wahlen",
+          "schemaTo": "wahlen",
+          "columnsFrom": [
+            "wahl_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "sessions_eligible_id_eligible_id_fk": {
+          "name": "sessions_eligible_id_eligible_id_fk",
+          "tableFrom": "sessions",
+          "tableTo": "eligible",
+          "schemaTo": "election",
+          "columnsFrom": [
+            "eligible_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "sessions_id_unique": {
+          "name": "sessions_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "id"
+          ]
+        }
+      }
+    },
+    "election.stimmen": {
+      "name": "stimmen",
+      "schema": "election",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "wahl_id": {
+          "name": "wahl_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "question_id": {
+          "name": "question_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "session_id": {
+          "name": "session_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "answer_id": {
+          "name": "answer_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "signed": {
+          "name": "signed",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "signed_at": {
+          "name": "signed_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "stimme_wahl_idx": {
+          "name": "stimme_wahl_idx",
+          "columns": [
+            {
+              "expression": "wahl_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "stimme_question_idx": {
+          "name": "stimme_question_idx",
+          "columns": [
+            {
+              "expression": "question_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "stimme_session_idx": {
+          "name": "stimme_session_idx",
+          "columns": [
+            {
+              "expression": "session_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "stimmen_wahl_id_wahlen_id_fk": {
+          "name": "stimmen_wahl_id_wahlen_id_fk",
+          "tableFrom": "stimmen",
+          "tableTo": "wahlen",
+          "schemaTo": "wahlen",
+          "columnsFrom": [
+            "wahl_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "stimmen_question_id_questions_id_fk": {
+          "name": "stimmen_question_id_questions_id_fk",
+          "tableFrom": "stimmen",
+          "tableTo": "questions",
+          "schemaTo": "questions",
+          "columnsFrom": [
+            "question_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "stimmen_session_id_sessions_id_fk": {
+          "name": "stimmen_session_id_sessions_id_fk",
+          "tableFrom": "stimmen",
+          "tableTo": "sessions",
+          "schemaTo": "election",
+          "columnsFrom": [
+            "session_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "stimmen_id_unique": {
+          "name": "stimmen_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "id"
+          ]
+        }
+      }
+    },
+    "files.files": {
       "name": "files",
-      "schema": "files",
       "schema": "files",
       "columns": {
         "id": {
@@ -435,8 +726,6 @@
         },
         "fileType": {
           "name": "fileType",
-          "type": "file-types",
-          "typeSchema": "files",
           "type": "file-types",
           "typeSchema": "files",
           "primaryKey": false,
@@ -476,8 +765,6 @@
           "name": "stored_in",
           "type": "fileStorage-types",
           "typeSchema": "files",
-          "type": "fileStorage-types",
-          "typeSchema": "files",
           "primaryKey": false,
           "notNull": true,
           "default": "'utfs'"
@@ -486,16 +773,12 @@
           "name": "target_storage",
           "type": "fileStorage-types",
           "typeSchema": "files",
-          "type": "fileStorage-types",
-          "typeSchema": "files",
           "primaryKey": false,
           "notNull": true,
           "default": "'blob'"
         },
         "transfer_status": {
           "name": "transfer_status",
-          "type": "fileTransfer-types",
-          "typeSchema": "files",
           "type": "fileTransfer-types",
           "typeSchema": "files",
           "primaryKey": false,
@@ -512,13 +795,6 @@
           "name": "question_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": true
-        },
-        "answer_id": {
-          "name": "answer_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
           "notNull": true
         },
         "answer_id": {
@@ -555,6 +831,7 @@
           "tableFrom": "files",
           "tableTo": "wahlen",
           "schemaTo": "wahlen",
+          "schemaTo": "wahlen",
           "columnsFrom": [
             "wahl_id"
           ],
@@ -568,6 +845,7 @@
           "name": "files_question_id_questions_id_fk",
           "tableFrom": "files",
           "tableTo": "questions",
+          "schemaTo": "questions",
           "schemaTo": "questions",
           "columnsFrom": [
             "question_id"
@@ -588,9 +866,6 @@
         }
       }
     },
-    "questions.info": {
-      "name": "info",
-      "schema": "questions",
     "questions.info": {
       "name": "info",
       "schema": "questions",
@@ -626,12 +901,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "image": {
-          "name": "image",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -652,10 +921,8 @@
         "info_question_id_questions_id_fk": {
           "name": "info_question_id_questions_id_fk",
           "tableFrom": "info",
-        "info_question_id_questions_id_fk": {
-          "name": "info_question_id_questions_id_fk",
-          "tableFrom": "info",
           "tableTo": "questions",
+          "schemaTo": "questions",
           "schemaTo": "questions",
           "columnsFrom": [
             "question_id"
@@ -679,12 +946,24 @@
           ],
           "onDelete": "set null",
           "onUpdate": "no action"
+        },
+        "info_image_files_id_fk": {
+          "name": "info_image_files_id_fk",
+          "tableFrom": "info",
+          "tableTo": "files",
+          "schemaTo": "files",
+          "columnsFrom": [
+            "image"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "info_id_unique": {
-          "name": "info_id_unique",
         "info_id_unique": {
           "name": "info_id_unique",
           "nullsNotDistinct": false,
@@ -692,9 +971,6 @@
         }
       }
     },
-    "questions.multiple-choice": {
-      "name": "multiple-choice",
-      "schema": "questions",
     "questions.multiple-choice": {
       "name": "multiple-choice",
       "schema": "questions",
@@ -766,10 +1042,8 @@
         "multiple-choice_question_id_questions_id_fk": {
           "name": "multiple-choice_question_id_questions_id_fk",
           "tableFrom": "multiple-choice",
-        "multiple-choice_question_id_questions_id_fk": {
-          "name": "multiple-choice_question_id_questions_id_fk",
-          "tableFrom": "multiple-choice",
           "tableTo": "questions",
+          "schemaTo": "questions",
           "schemaTo": "questions",
           "columnsFrom": [
             "question_id"
@@ -785,16 +1059,11 @@
       "uniqueConstraints": {
         "multiple-choice_id_unique": {
           "name": "multiple-choice_id_unique",
-        "multiple-choice_id_unique": {
-          "name": "multiple-choice_id_unique",
           "nullsNotDistinct": false,
           "columns": ["id"]
         }
       }
     },
-    "questions.true-false": {
-      "name": "true-false",
-      "schema": "questions",
     "questions.true-false": {
       "name": "true-false",
       "schema": "questions",
@@ -823,12 +1092,6 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
-        },
-        "o1_id": {
-          "name": "o1_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
         },
         "o1_id": {
           "name": "o1_id",
@@ -866,12 +1129,6 @@
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
-        },
-        "o2_id": {
-          "name": "o2_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
         },
         "o2_id": {
           "name": "o2_id",
@@ -946,10 +1203,8 @@
         "true-false_question_id_questions_id_fk": {
           "name": "true-false_question_id_questions_id_fk",
           "tableFrom": "true-false",
-        "true-false_question_id_questions_id_fk": {
-          "name": "true-false_question_id_questions_id_fk",
-          "tableFrom": "true-false",
           "tableTo": "questions",
+          "schemaTo": "questions",
           "schemaTo": "questions",
           "columnsFrom": [
             "question_id"
@@ -963,10 +1218,8 @@
         "true-false_o1_image_files_id_fk": {
           "name": "true-false_o1_image_files_id_fk",
           "tableFrom": "true-false",
-        "true-false_o1_image_files_id_fk": {
-          "name": "true-false_o1_image_files_id_fk",
-          "tableFrom": "true-false",
           "tableTo": "files",
+          "schemaTo": "files",
           "schemaTo": "files",
           "columnsFrom": [
             "o1_image"
@@ -980,10 +1233,8 @@
         "true-false_o2_image_files_id_fk": {
           "name": "true-false_o2_image_files_id_fk",
           "tableFrom": "true-false",
-        "true-false_o2_image_files_id_fk": {
-          "name": "true-false_o2_image_files_id_fk",
-          "tableFrom": "true-false",
           "tableTo": "files",
+          "schemaTo": "files",
           "schemaTo": "files",
           "columnsFrom": [
             "o2_image"
@@ -999,17 +1250,13 @@
       "uniqueConstraints": {
         "true-false_id_unique": {
           "name": "true-false_id_unique",
-        "true-false_id_unique": {
-          "name": "true-false_id_unique",
           "nullsNotDistinct": false,
           "columns": ["id"]
         }
       }
     },
     "questions.questions": {
-    "questions.questions": {
       "name": "questions",
-      "schema": "questions",
       "schema": "questions",
       "columns": {
         "id": {
@@ -1029,16 +1276,8 @@
           "name": "type",
           "type": "types",
           "typeSchema": "questions",
-          "type": "types",
-          "typeSchema": "questions",
           "primaryKey": false,
           "notNull": true
-        },
-        "question_id": {
-          "name": "question_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
         },
         "question_id": {
           "name": "question_id",
@@ -1099,14 +1338,14 @@
         "questions_id_unique": {
           "name": "questions_id_unique",
           "nullsNotDistinct": false,
-          "columns": ["id"]
+          "columns": [
+            "id"
+          ]
         }
       }
     },
     "wahlen.wahlen": {
-    "wahlen.wahlen": {
       "name": "wahlen",
-      "schema": "wahlen",
       "schema": "wahlen",
       "columns": {
         "id": {
@@ -1126,16 +1365,12 @@
           "name": "status",
           "type": "status-type",
           "typeSchema": "wahlen",
-          "type": "status-type",
-          "typeSchema": "wahlen",
           "primaryKey": false,
           "notNull": true,
           "default": "'draft'"
         },
         "alert": {
           "name": "alert",
-          "type": "alert-type",
-          "typeSchema": "wahlen",
           "type": "alert-type",
           "typeSchema": "wahlen",
           "primaryKey": false,
@@ -1265,6 +1500,9 @@
     "election.eligibility-status-type": {
       "name": "eligibility-status-type",
       "schema": "election",
+    "election.eligibility-status-type": {
+      "name": "eligibility-status-type",
+      "schema": "election",
       "values": [
         "draft",
         "queued",
@@ -1285,11 +1523,26 @@
     "files.fileStorage-types": {
       "name": "fileStorage-types",
       "schema": "files",
+    "election.session-status-type": {
+      "name": "session-status-type",
+      "schema": "election",
+      "values": [
+        "active",
+        "ended",
+        "revoked"
+      ]
+    },
+    "files.fileStorage-types": {
+      "name": "fileStorage-types",
+      "schema": "files",
       "values": [
         "utfs",
         "blob"
       ]
     },
+    "files.fileTransfer-types": {
+      "name": "fileTransfer-types",
+      "schema": "files",
     "files.fileTransfer-types": {
       "name": "fileTransfer-types",
       "schema": "files",
@@ -1302,12 +1555,18 @@
     "files.file-types": {
       "name": "file-types",
       "schema": "files",
+    "files.file-types": {
+      "name": "file-types",
+      "schema": "files",
       "values": [
         "logo",
         "banner",
         "candidate"
       ]
     },
+    "questions.types": {
+      "name": "types",
+      "schema": "questions",
     "questions.types": {
       "name": "types",
       "schema": "questions",
@@ -1320,16 +1579,20 @@
     "wahlen.alert-type": {
       "name": "alert-type",
       "schema": "wahlen",
+    "wahlen.alert-type": {
+      "name": "alert-type",
+      "schema": "wahlen",
       "values": [
+        "card",
+        "info",
+        "warning",
+        "error"
         "card",
         "info",
         "warning",
         "error"
       ]
     },
-    "wahlen.status-type": {
-      "name": "status-type",
-      "schema": "wahlen",
     "wahlen.status-type": {
       "name": "status-type",
       "schema": "wahlen",
@@ -1343,12 +1606,6 @@
         "archived"
       ]
     }
-  },
-  "schemas": {
-    "election": "election",
-    "files": "files",
-    "questions": "questions",
-    "wahlen": "wahlen"
   },
   "schemas": {
     "election": "election",
