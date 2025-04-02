@@ -1,12 +1,12 @@
 {
-  "id": "2159b00c-c7e1-4176-8287-150e4250af2d",
+  "id": "f805c878-db95-4577-b464-6c6cf758175f",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
-    "public.eligible": {
+    "election.eligible": {
       "name": "eligible",
-      "schema": "",
+      "schema": "election",
       "columns": {
         "id": {
           "name": "id",
@@ -29,8 +29,8 @@
         },
         "status": {
           "name": "status",
-          "type": "eligibility_status_type",
-          "typeSchema": "public",
+          "type": "eligibility-status-type",
+          "typeSchema": "election",
           "primaryKey": false,
           "notNull": true,
           "default": "'draft'"
@@ -93,6 +93,7 @@
           "name": "eligible_wahl_id_wahlen_id_fk",
           "tableFrom": "eligible",
           "tableTo": "wahlen",
+          "schemaTo": "wahlen",
           "columnsFrom": [
             "wahl_id"
           ],
@@ -114,581 +115,9 @@
         }
       }
     },
-    "public.files": {
-      "name": "files",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "fileType": {
-          "name": "fileType",
-          "type": "file_types",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "dataType": {
-          "name": "dataType",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "size": {
-          "name": "size",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "ufs_key": {
-          "name": "ufs_key",
-          "type": "varchar(48)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "blob_path": {
-          "name": "blob_path",
-          "type": "varchar",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "url": {
-          "name": "url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "stored_in": {
-          "name": "stored_in",
-          "type": "fileStorage_types",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'utfs'"
-        },
-        "target_storage": {
-          "name": "target_storage",
-          "type": "fileStorage_types",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'blob'"
-        },
-        "transfer_status": {
-          "name": "transfer_status",
-          "type": "fileTransfer_types",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'idle'"
-        },
-        "wahl_id": {
-          "name": "wahl_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "question_id": {
-          "name": "question_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "owner": {
-          "name": "owner",
-          "type": "varchar(32)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "files_wahl_id_wahlen_id_fk": {
-          "name": "files_wahl_id_wahlen_id_fk",
-          "tableFrom": "files",
-          "tableTo": "wahlen",
-          "columnsFrom": [
-            "wahl_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "files_question_id_questions_id_fk": {
-          "name": "files_question_id_questions_id_fk",
-          "tableFrom": "files",
-          "tableTo": "questions",
-          "columnsFrom": [
-            "question_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "files_id_unique": {
-          "name": "files_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "id"
-          ]
-        }
-      }
-    },
-    "public.q-info": {
-      "name": "q-info",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "question_id": {
-          "name": "question_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "title": {
-          "name": "title",
-          "type": "varchar(256)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "q-info_question_id_questions_id_fk": {
-          "name": "q-info_question_id_questions_id_fk",
-          "tableFrom": "q-info",
-          "tableTo": "questions",
-          "columnsFrom": [
-            "question_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "q-info_id_unique": {
-          "name": "q-info_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "id"
-          ]
-        }
-      }
-    },
-    "public.q-multiple-choice": {
-      "name": "q-multiple-choice",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "question_id": {
-          "name": "question_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "title": {
-          "name": "title",
-          "type": "varchar(256)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "content": {
-          "name": "content",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "q-multiple-choice_question_idx": {
-          "name": "q-multiple-choice_question_idx",
-          "columns": [
-            {
-              "expression": "question_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "q-multiple-choice_question_id_questions_id_fk": {
-          "name": "q-multiple-choice_question_id_questions_id_fk",
-          "tableFrom": "q-multiple-choice",
-          "tableTo": "questions",
-          "columnsFrom": [
-            "question_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "q-multiple-choice_id_unique": {
-          "name": "q-multiple-choice_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "id"
-          ]
-        }
-      }
-    },
-    "public.q-true-false": {
-      "name": "q-true-false",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "question_id": {
-          "name": "question_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "title": {
-          "name": "title",
-          "type": "varchar(256)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "o1_title": {
-          "name": "o1_title",
-          "type": "varchar(256)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "o1_description": {
-          "name": "o1_description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "o1_correct": {
-          "name": "o1_correct",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "o1_colour": {
-          "name": "o1_colour",
-          "type": "varchar(7)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "o1_image": {
-          "name": "o1_image",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "o2_title": {
-          "name": "o2_title",
-          "type": "varchar(256)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "o2_description": {
-          "name": "o2_description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "o2_correct": {
-          "name": "o2_correct",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "o2_colour": {
-          "name": "o2_colour",
-          "type": "varchar(7)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "o2_image": {
-          "name": "o2_image",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "q-true-false_question_idx": {
-          "name": "q-true-false_question_idx",
-          "columns": [
-            {
-              "expression": "question_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "q-true-false_question_id_questions_id_fk": {
-          "name": "q-true-false_question_id_questions_id_fk",
-          "tableFrom": "q-true-false",
-          "tableTo": "questions",
-          "columnsFrom": [
-            "question_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "q-true-false_o1_image_files_id_fk": {
-          "name": "q-true-false_o1_image_files_id_fk",
-          "tableFrom": "q-true-false",
-          "tableTo": "files",
-          "columnsFrom": [
-            "o1_image"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "q-true-false_o2_image_files_id_fk": {
-          "name": "q-true-false_o2_image_files_id_fk",
-          "tableFrom": "q-true-false",
-          "tableTo": "files",
-          "columnsFrom": [
-            "o2_image"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "q-true-false_id_unique": {
-          "name": "q-true-false_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "id"
-          ]
-        }
-      }
-    },
-    "public.questions": {
-      "name": "questions",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "wahl_id": {
-          "name": "wahl_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "type": {
-          "name": "type",
-          "type": "question_type",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "question_wahl_idx": {
-          "name": "question_wahl_idx",
-          "columns": [
-            {
-              "expression": "wahl_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "questions_wahl_id_wahlen_id_fk": {
-          "name": "questions_wahl_id_wahlen_id_fk",
-          "tableFrom": "questions",
-          "tableTo": "wahlen",
-          "columnsFrom": [
-            "wahl_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "questions_id_unique": {
-          "name": "questions_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "id"
-          ]
-        }
-      }
-    },
-    "public.sessions": {
+    "election.sessions": {
       "name": "sessions",
-      "schema": "",
+      "schema": "election",
       "columns": {
         "id": {
           "name": "id",
@@ -717,8 +146,8 @@
         },
         "status": {
           "name": "status",
-          "type": "session_status_type",
-          "typeSchema": "public",
+          "type": "session-status-type",
+          "typeSchema": "election",
           "primaryKey": false,
           "notNull": true,
           "default": "'active'"
@@ -781,6 +210,7 @@
           "name": "sessions_wahl_id_wahlen_id_fk",
           "tableFrom": "sessions",
           "tableTo": "wahlen",
+          "schemaTo": "wahlen",
           "columnsFrom": [
             "wahl_id"
           ],
@@ -794,6 +224,7 @@
           "name": "sessions_eligible_id_eligible_id_fk",
           "tableFrom": "sessions",
           "tableTo": "eligible",
+          "schemaTo": "election",
           "columnsFrom": [
             "eligible_id"
           ],
@@ -815,9 +246,9 @@
         }
       }
     },
-    "public.stimmen": {
+    "election.stimmen": {
       "name": "stimmen",
-      "schema": "",
+      "schema": "election",
       "columns": {
         "id": {
           "name": "id",
@@ -929,6 +360,7 @@
           "name": "stimmen_wahl_id_wahlen_id_fk",
           "tableFrom": "stimmen",
           "tableTo": "wahlen",
+          "schemaTo": "wahlen",
           "columnsFrom": [
             "wahl_id"
           ],
@@ -942,6 +374,7 @@
           "name": "stimmen_question_id_questions_id_fk",
           "tableFrom": "stimmen",
           "tableTo": "questions",
+          "schemaTo": "questions",
           "columnsFrom": [
             "question_id"
           ],
@@ -955,6 +388,7 @@
           "name": "stimmen_session_id_sessions_id_fk",
           "tableFrom": "stimmen",
           "tableTo": "sessions",
+          "schemaTo": "election",
           "columnsFrom": [
             "session_id"
           ],
@@ -976,9 +410,633 @@
         }
       }
     },
-    "public.wahlen": {
+    "files.files": {
+      "name": "files",
+      "schema": "files",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fileType": {
+          "name": "fileType",
+          "type": "file-types",
+          "typeSchema": "files",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "dataType": {
+          "name": "dataType",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "size": {
+          "name": "size",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ufs_key": {
+          "name": "ufs_key",
+          "type": "varchar(48)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "blob_path": {
+          "name": "blob_path",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "url": {
+          "name": "url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "stored_in": {
+          "name": "stored_in",
+          "type": "fileStorage-types",
+          "typeSchema": "files",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'utfs'"
+        },
+        "target_storage": {
+          "name": "target_storage",
+          "type": "fileStorage-types",
+          "typeSchema": "files",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'blob'"
+        },
+        "transfer_status": {
+          "name": "transfer_status",
+          "type": "fileTransfer-types",
+          "typeSchema": "files",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'idle'"
+        },
+        "wahl_id": {
+          "name": "wahl_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "question_id": {
+          "name": "question_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "answer_id": {
+          "name": "answer_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "owner": {
+          "name": "owner",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "files_wahl_id_wahlen_id_fk": {
+          "name": "files_wahl_id_wahlen_id_fk",
+          "tableFrom": "files",
+          "tableTo": "wahlen",
+          "schemaTo": "wahlen",
+          "columnsFrom": [
+            "wahl_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "files_question_id_questions_id_fk": {
+          "name": "files_question_id_questions_id_fk",
+          "tableFrom": "files",
+          "tableTo": "questions",
+          "schemaTo": "questions",
+          "columnsFrom": [
+            "question_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "files_id_unique": {
+          "name": "files_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "id"
+          ]
+        }
+      }
+    },
+    "questions.info": {
+      "name": "info",
+      "schema": "questions",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "question_id": {
+          "name": "question_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "image": {
+          "name": "image",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "info_question_id_questions_id_fk": {
+          "name": "info_question_id_questions_id_fk",
+          "tableFrom": "info",
+          "tableTo": "questions",
+          "schemaTo": "questions",
+          "columnsFrom": [
+            "question_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "info_image_files_id_fk": {
+          "name": "info_image_files_id_fk",
+          "tableFrom": "info",
+          "tableTo": "files",
+          "schemaTo": "files",
+          "columnsFrom": [
+            "image"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "info_id_unique": {
+          "name": "info_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "id"
+          ]
+        }
+      }
+    },
+    "questions.multiple-choice": {
+      "name": "multiple-choice",
+      "schema": "questions",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "question_id": {
+          "name": "question_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "content": {
+          "name": "content",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "q-multiple-choice_question_idx": {
+          "name": "q-multiple-choice_question_idx",
+          "columns": [
+            {
+              "expression": "question_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "multiple-choice_question_id_questions_id_fk": {
+          "name": "multiple-choice_question_id_questions_id_fk",
+          "tableFrom": "multiple-choice",
+          "tableTo": "questions",
+          "schemaTo": "questions",
+          "columnsFrom": [
+            "question_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "multiple-choice_id_unique": {
+          "name": "multiple-choice_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "id"
+          ]
+        }
+      }
+    },
+    "questions.true-false": {
+      "name": "true-false",
+      "schema": "questions",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "question_id": {
+          "name": "question_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "o1_id": {
+          "name": "o1_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "o1_title": {
+          "name": "o1_title",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "o1_description": {
+          "name": "o1_description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "o1_correct": {
+          "name": "o1_correct",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "o1_colour": {
+          "name": "o1_colour",
+          "type": "varchar(7)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "o1_image": {
+          "name": "o1_image",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "o2_id": {
+          "name": "o2_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "o2_title": {
+          "name": "o2_title",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "o2_description": {
+          "name": "o2_description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "o2_correct": {
+          "name": "o2_correct",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "o2_colour": {
+          "name": "o2_colour",
+          "type": "varchar(7)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "o2_image": {
+          "name": "o2_image",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "q-true-false_question_idx": {
+          "name": "q-true-false_question_idx",
+          "columns": [
+            {
+              "expression": "question_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "true-false_question_id_questions_id_fk": {
+          "name": "true-false_question_id_questions_id_fk",
+          "tableFrom": "true-false",
+          "tableTo": "questions",
+          "schemaTo": "questions",
+          "columnsFrom": [
+            "question_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "true-false_o1_image_files_id_fk": {
+          "name": "true-false_o1_image_files_id_fk",
+          "tableFrom": "true-false",
+          "tableTo": "files",
+          "schemaTo": "files",
+          "columnsFrom": [
+            "o1_image"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "true-false_o2_image_files_id_fk": {
+          "name": "true-false_o2_image_files_id_fk",
+          "tableFrom": "true-false",
+          "tableTo": "files",
+          "schemaTo": "files",
+          "columnsFrom": [
+            "o2_image"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "true-false_id_unique": {
+          "name": "true-false_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "id"
+          ]
+        }
+      }
+    },
+    "questions.questions": {
+      "name": "questions",
+      "schema": "questions",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "wahl_id": {
+          "name": "wahl_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "types",
+          "typeSchema": "questions",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "question_id": {
+          "name": "question_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "question_wahl_idx": {
+          "name": "question_wahl_idx",
+          "columns": [
+            {
+              "expression": "wahl_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "questions_wahl_id_wahlen_id_fk": {
+          "name": "questions_wahl_id_wahlen_id_fk",
+          "tableFrom": "questions",
+          "tableTo": "wahlen",
+          "schemaTo": "wahlen",
+          "columnsFrom": [
+            "wahl_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "questions_id_unique": {
+          "name": "questions_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "id"
+          ]
+        }
+      }
+    },
+    "wahlen.wahlen": {
       "name": "wahlen",
-      "schema": "",
+      "schema": "wahlen",
       "columns": {
         "id": {
           "name": "id",
@@ -995,16 +1053,16 @@
         },
         "status": {
           "name": "status",
-          "type": "status_type",
-          "typeSchema": "public",
+          "type": "status-type",
+          "typeSchema": "wahlen",
           "primaryKey": false,
           "notNull": true,
           "default": "'draft'"
         },
         "alert": {
           "name": "alert",
-          "type": "alert_type",
-          "typeSchema": "public",
+          "type": "alert-type",
+          "typeSchema": "wahlen",
           "primaryKey": false,
           "notNull": false
         },
@@ -1133,19 +1191,9 @@
     }
   },
   "enums": {
-    "public.alert_type": {
-      "name": "alert_type",
-      "schema": "public",
-      "values": [
-        "card",
-        "info",
-        "warning",
-        "error"
-      ]
-    },
-    "public.eligibility_status_type": {
-      "name": "eligibility_status_type",
-      "schema": "public",
+    "election.eligibility-status-type": {
+      "name": "eligibility-status-type",
+      "schema": "election",
       "values": [
         "draft",
         "queued",
@@ -1154,53 +1202,63 @@
         "expired"
       ]
     },
-    "public.fileStorage_types": {
-      "name": "fileStorage_types",
-      "schema": "public",
-      "values": [
-        "utfs",
-        "blob"
-      ]
-    },
-    "public.fileTransfer_types": {
-      "name": "fileTransfer_types",
-      "schema": "public",
-      "values": [
-        "idle",
-        "queued",
-        "in progress"
-      ]
-    },
-    "public.file_types": {
-      "name": "file_types",
-      "schema": "public",
-      "values": [
-        "logo",
-        "banner",
-        "candidate"
-      ]
-    },
-    "public.question_type": {
-      "name": "question_type",
-      "schema": "public",
-      "values": [
-        "info",
-        "true_false",
-        "multiple_choice"
-      ]
-    },
-    "public.session_status_type": {
-      "name": "session_status_type",
-      "schema": "public",
+    "election.session-status-type": {
+      "name": "session-status-type",
+      "schema": "election",
       "values": [
         "active",
         "ended",
         "revoked"
       ]
     },
-    "public.status_type": {
-      "name": "status_type",
-      "schema": "public",
+    "files.fileStorage-types": {
+      "name": "fileStorage-types",
+      "schema": "files",
+      "values": [
+        "utfs",
+        "blob"
+      ]
+    },
+    "files.fileTransfer-types": {
+      "name": "fileTransfer-types",
+      "schema": "files",
+      "values": [
+        "idle",
+        "queued",
+        "in progress"
+      ]
+    },
+    "files.file-types": {
+      "name": "file-types",
+      "schema": "files",
+      "values": [
+        "logo",
+        "banner",
+        "candidate"
+      ]
+    },
+    "questions.types": {
+      "name": "types",
+      "schema": "questions",
+      "values": [
+        "info",
+        "true_false",
+        "multiple_choice"
+      ]
+    },
+    "wahlen.alert-type": {
+      "name": "alert-type",
+      "schema": "wahlen",
+      "values": [
+        "card",
+        "info",
+        "warning",
+        "error"
+      ]
+    },
+    "wahlen.status-type": {
+      "name": "status-type",
+      "schema": "wahlen",
       "values": [
         "draft",
         "queued",
@@ -1212,7 +1270,12 @@
       ]
     }
   },
-  "schemas": {},
+  "schemas": {
+    "election": "election",
+    "files": "files",
+    "questions": "questions",
+    "wahlen": "wahlen"
+  },
   "sequences": {},
   "_meta": {
     "columns": {},
