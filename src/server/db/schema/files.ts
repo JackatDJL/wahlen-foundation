@@ -84,35 +84,44 @@ export const fileTransfer_types = fileSchema.enum("fileTransfer-types", [
  * - createdAt: Timestamp of when the file was created
  * - updatedAt: Timestamp of when the file was last updated
  */
-export const files = fileSchema.table("files", {
-  id: uuid("id").primaryKey().defaultRandom().unique(),
-  name: text("name").notNull(),
-  fileType: file_types("fileType").notNull(),
-  dataType: text("dataType").notNull(),
-  size: integer("size").notNull(),
+export const files = fileSchema.table(
+  "files", 
+  {
+    id: uuid("id").primaryKey().defaultRandom().unique(),
+    name: text("name").notNull(),
+    fileType: file_types("fileType").notNull(),
+    dataType: text("dataType").notNull(),
+    size: integer("size").notNull(),
 
-  ufsKey: varchar("ufs_key", { length: 48 }),
-  blobPath: varchar("blob_path"),
-  url: text("url").notNull(),
+    ufsKey: varchar("ufs_key", { length: 48 }),
+    blobPath: varchar("blob_path"),
+    url: text("url").notNull(),
 
-  storedIn: fileStorage_types("stored_in").notNull().default("utfs"),
-  targetStorage: fileStorage_types("target_storage").notNull().default("blob"),
-  transferStatus: fileTransfer_types("transfer_status")
-    .notNull()
-    .default("idle"),
+    storedIn: fileStorage_types("stored_in").notNull().default("utfs"),
+    targetStorage: fileStorage_types("target_storage").notNull().default("blob"),
+    transferStatus: fileTransfer_types("transfer_status")
+      .notNull()
+      .default("idle"),
 
-  wahlId: uuid("wahl_id")
-    .references(() => wahlen.id)
-    .notNull(),
-  questionId: uuid("question_id")
-    .notNull()
-    .references(() => questions.id),
-  answerId: uuid("answer_id").notNull(),
-  owner: varchar("owner", { length: 32 }).notNull(),
+    wahlId: uuid("wahl_id")
+      .references(() => wahlen.id)
+      .notNull(),
+    questionId: uuid("question_id")
+      .notNull()
+      .references(() => questions.id),
+    answerId: uuid("answer_id").notNull(),
+    owner: varchar("owner", { length: 32 }).notNull(),
 
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    wahlIdIdx: index("file_wahl_idx").on(table.wahlId),
+    questionIdIdx: index("file_question_idx").on(table.questionId),
+    fileTypeIdx: index("file_type_idx").on(table.fileType),
+    transferStatusIdx: index("file_transfer_status_idx").on(table.transferStatus),
+  }),
+);
 
 export const filesRelations = relations(files, ({ one }) => ({
   wahl: one(wahlen, {
