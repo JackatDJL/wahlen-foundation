@@ -1,5 +1,5 @@
 {
-  "id": "69582246-07c3-44ca-aa38-6e172ee42142",
+  "id": "f805c878-db95-4577-b464-6c6cf758175f",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -94,12 +94,8 @@
           "tableFrom": "eligible",
           "tableTo": "wahlen",
           "schemaTo": "wahlen",
-          "columnsFrom": [
-            "wahl_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["wahl_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -109,9 +105,7 @@
         "eligible_id_unique": {
           "name": "eligible_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       }
     },
@@ -211,12 +205,8 @@
           "tableFrom": "sessions",
           "tableTo": "wahlen",
           "schemaTo": "wahlen",
-          "columnsFrom": [
-            "wahl_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["wahl_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -225,12 +215,8 @@
           "tableFrom": "sessions",
           "tableTo": "eligible",
           "schemaTo": "election",
-          "columnsFrom": [
-            "eligible_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["eligible_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -240,9 +226,7 @@
         "sessions_id_unique": {
           "name": "sessions_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       }
     },
@@ -361,12 +345,8 @@
           "tableFrom": "stimmen",
           "tableTo": "wahlen",
           "schemaTo": "wahlen",
-          "columnsFrom": [
-            "wahl_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["wahl_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -375,12 +355,8 @@
           "tableFrom": "stimmen",
           "tableTo": "questions",
           "schemaTo": "questions",
-          "columnsFrom": [
-            "question_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["question_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -389,12 +365,8 @@
           "tableFrom": "stimmen",
           "tableTo": "sessions",
           "schemaTo": "election",
-          "columnsFrom": [
-            "session_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["session_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -404,9 +376,7 @@
         "stimmen_id_unique": {
           "name": "stimmen_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       }
     },
@@ -527,80 +497,15 @@
           "default": "now()"
         }
       },
-      "indexes": {
-        "file_wahl_idx": {
-          "name": "file_wahl_idx",
-          "columns": [
-            {
-              "expression": "wahl_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "file_question_idx": {
-          "name": "file_question_idx",
-          "columns": [
-            {
-              "expression": "question_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "file_type_idx": {
-          "name": "file_type_idx",
-          "columns": [
-            {
-              "expression": "fileType",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "file_transfer_status_idx": {
-          "name": "file_transfer_status_idx",
-          "columns": [
-            {
-              "expression": "transfer_status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
+      "indexes": {},
       "foreignKeys": {
         "files_wahl_id_wahlen_id_fk": {
           "name": "files_wahl_id_wahlen_id_fk",
           "tableFrom": "files",
           "tableTo": "wahlen",
           "schemaTo": "wahlen",
-          "columnsFrom": [
-            "wahl_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["wahl_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -609,12 +514,8 @@
           "tableFrom": "files",
           "tableTo": "questions",
           "schemaTo": "questions",
-          "columnsFrom": [
-            "question_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["question_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -624,9 +525,7 @@
         "files_id_unique": {
           "name": "files_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       }
     },
@@ -687,12 +586,8 @@
           "tableFrom": "info",
           "tableTo": "questions",
           "schemaTo": "questions",
-          "columnsFrom": [
-            "question_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["question_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -701,12 +596,8 @@
           "tableFrom": "info",
           "tableTo": "files",
           "schemaTo": "files",
-          "columnsFrom": [
-            "image"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["image"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -716,9 +607,7 @@
         "info_id_unique": {
           "name": "info_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       }
     },
@@ -795,12 +684,8 @@
           "tableFrom": "multiple-choice",
           "tableTo": "questions",
           "schemaTo": "questions",
-          "columnsFrom": [
-            "question_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["question_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -810,9 +695,7 @@
         "multiple-choice_id_unique": {
           "name": "multiple-choice_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       }
     },
@@ -957,12 +840,8 @@
           "tableFrom": "true-false",
           "tableTo": "questions",
           "schemaTo": "questions",
-          "columnsFrom": [
-            "question_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["question_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -971,12 +850,8 @@
           "tableFrom": "true-false",
           "tableTo": "files",
           "schemaTo": "files",
-          "columnsFrom": [
-            "o1_image"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["o1_image"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -985,12 +860,8 @@
           "tableFrom": "true-false",
           "tableTo": "files",
           "schemaTo": "files",
-          "columnsFrom": [
-            "o2_image"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["o2_image"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -1000,9 +871,7 @@
         "true-false_id_unique": {
           "name": "true-false_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       }
     },
@@ -1074,12 +943,8 @@
           "tableFrom": "questions",
           "tableTo": "wahlen",
           "schemaTo": "wahlen",
-          "columnsFrom": [
-            "wahl_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["wahl_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1089,9 +954,7 @@
         "questions_id_unique": {
           "name": "questions_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       }
     },
@@ -1237,16 +1100,12 @@
         "wahlen_id_unique": {
           "name": "wahlen_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         },
         "wahlen_shortname_unique": {
           "name": "wahlen_shortname_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "shortname"
-          ]
+          "columns": ["shortname"]
         }
       }
     }
@@ -1255,67 +1114,37 @@
     "election.eligibility-status-type": {
       "name": "eligibility-status-type",
       "schema": "election",
-      "values": [
-        "draft",
-        "queued",
-        "pending",
-        "active",
-        "expired"
-      ]
+      "values": ["draft", "queued", "pending", "active", "expired"]
     },
     "election.session-status-type": {
       "name": "session-status-type",
       "schema": "election",
-      "values": [
-        "active",
-        "ended",
-        "revoked"
-      ]
+      "values": ["active", "ended", "revoked"]
     },
     "files.fileStorage-types": {
       "name": "fileStorage-types",
       "schema": "files",
-      "values": [
-        "utfs",
-        "blob"
-      ]
+      "values": ["utfs", "blob"]
     },
     "files.fileTransfer-types": {
       "name": "fileTransfer-types",
       "schema": "files",
-      "values": [
-        "idle",
-        "queued",
-        "in progress"
-      ]
+      "values": ["idle", "queued", "in progress"]
     },
     "files.file-types": {
       "name": "file-types",
       "schema": "files",
-      "values": [
-        "logo",
-        "banner",
-        "candidate"
-      ]
+      "values": ["logo", "banner", "candidate"]
     },
     "questions.types": {
       "name": "types",
       "schema": "questions",
-      "values": [
-        "info",
-        "true_false",
-        "multiple_choice"
-      ]
+      "values": ["info", "true_false", "multiple_choice"]
     },
     "wahlen.alert-type": {
       "name": "alert-type",
       "schema": "wahlen",
-      "values": [
-        "card",
-        "info",
-        "warning",
-        "error"
-      ]
+      "values": ["card", "info", "warning", "error"]
     },
     "wahlen.status-type": {
       "name": "status-type",
