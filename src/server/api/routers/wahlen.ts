@@ -6,7 +6,7 @@ import {
   protectedProcedure,
   publicProcedure,
 } from "~/server/api/trpc";
-import { wahlen } from "~/server/db/schema";
+import { wahlen } from "~/server/db/schema/wahlen";
 import { randomUUID } from "crypto";
 import { eq } from "drizzle-orm";
 import { type Result, err, ok } from "neverthrow";
