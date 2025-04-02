@@ -61,7 +61,7 @@ export const fileTransfer_types = fileSchema.enum("fileTransfer-types", [
 /**
  * Files Table
  *
- * This table stores all files uploaded to our platform.
+ * This table stores all files uploaded to our plattform.
  *
  * - id: UUID of the file
  * - name: Name of the file
