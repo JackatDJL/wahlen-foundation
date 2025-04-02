@@ -61,7 +61,7 @@ export const alertTypeEnum = wahlenSchema.enum("alert-type", [
  * This table contains all elections and their metadata.
  *
  * - id: Election ID
- * - shortname: Election Shortname (acessible under shortname.wahl.djl.foundation)
+ * - shortname: Election Shortname (accessible under shortname.wahl.djl.foundation)
  * - status: Election Status typeof statusTypeEnum
  *
  * - alert: Election Alert Type typeof alertTypeEnum
