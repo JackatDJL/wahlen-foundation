@@ -8,7 +8,7 @@ import {
   questionMultipleChoice,
   questions,
   questionTrueFalse,
-} from "~/server/db/schema";
+} from "~/server/db/schema/questions";
 import { chunkProcedure } from "./create-chunk";
 import { throwIfActive } from "./delete";
 import { err, ok, type Result } from "neverthrow";

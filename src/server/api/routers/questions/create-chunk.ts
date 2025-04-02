@@ -6,7 +6,7 @@ import {
   questionInfo,
   questionMultipleChoice,
   questionTrueFalse,
-} from "~/server/db/schema";
+} from "~/server/db/schema/questions";
 import { insertableRootQuestion } from "./create";
 import { throwIfActive } from "./delete";
 import { err, ok, type Result } from "neverthrow";
