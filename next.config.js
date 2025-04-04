@@ -3,6 +3,7 @@
  * for Docker builds.
  */
 import "./src/env.js";
+import { withSentryConfig } from "@sentry/nextjs";
 
 /** @type {import("next").NextConfig} */
 const nextConfig = {
@@ -33,15 +34,11 @@ const nextConfig = {
 
 import withVercelToolbar from "@vercel/toolbar/plugins/next";
 
-const config = withVercelToolbar()(nextConfig); // Das Soll so / mein got ich musste die Types absuchen für diese Scheiße
-
-export default config;
+const VercelToolbarConfig = withVercelToolbar()(nextConfig); // Das Soll so / mein got ich musste die Types absuchen für diese Scheiße
 
 // Injected content via Sentry wizard below
 
-const { withSentryConfig } = require("@sentry/nextjs");
-
-module.exports = withSentryConfig(module.exports, {
+export default withSentryConfig(VercelToolbarConfig, {
   // For all available options, see:
   // https://www.npmjs.com/package/@sentry/webpack-plugin#options
 
