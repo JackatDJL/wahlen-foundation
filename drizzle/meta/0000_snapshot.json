@@ -1,5 +1,5 @@
 {
-  "id": "f805c878-db95-4577-b464-6c6cf758175f",
+  "id": "69582246-07c3-44ca-aa38-6e172ee42142",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -824,7 +824,68 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "file_wahl_idx": {
+          "name": "file_wahl_idx",
+          "columns": [
+            {
+              "expression": "wahl_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "file_question_idx": {
+          "name": "file_question_idx",
+          "columns": [
+            {
+              "expression": "question_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "file_type_idx": {
+          "name": "file_type_idx",
+          "columns": [
+            {
+              "expression": "fileType",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "file_transfer_status_idx": {
+          "name": "file_transfer_status_idx",
+          "columns": [
+            {
+              "expression": "transfer_status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "files_wahl_id_wahlen_id_fk": {
           "name": "files_wahl_id_wahlen_id_fk",
