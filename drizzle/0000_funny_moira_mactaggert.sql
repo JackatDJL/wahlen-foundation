@@ -280,6 +280,10 @@ CREATE INDEX IF NOT EXISTS "session_eligible_idx" ON "election"."sessions" USING
 CREATE INDEX IF NOT EXISTS "stimme_wahl_idx" ON "election"."stimmen" USING btree ("wahl_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "stimme_question_idx" ON "election"."stimmen" USING btree ("question_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "stimme_session_idx" ON "election"."stimmen" USING btree ("session_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "file_wahl_idx" ON "files"."files" USING btree ("wahl_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "file_question_idx" ON "files"."files" USING btree ("question_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "file_type_idx" ON "files"."files" USING btree ("fileType");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "file_transfer_status_idx" ON "files"."files" USING btree ("transfer_status");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "q-multiple-choice_question_idx" ON "questions"."multiple-choice" USING btree ("question_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "q-true-false_question_idx" ON "questions"."true-false" USING btree ("question_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "question_wahl_idx" ON "questions"."questions" USING btree ("wahl_id");--> statement-breakpoint
