@@ -4,12 +4,15 @@ import { useState } from "react";
 import { handleRouting } from "~/server/foundation-router";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
+import { Checkbox } from "~/components/ui/checkbox";
 
 export function RouterTestClient() {
   const [result, setResult] = useState<string>("");
   const [inputPath, setInputPath] = useState<string>("");
+  const [devMode, setDevMode] = useState<boolean>(true);
+
   const handleTest = async () => {
-    setResult(await handleRouting(inputPath, true));
+    setResult((await handleRouting(inputPath, true, !devMode)) ?? "");
   };
 
   return (
@@ -30,6 +33,16 @@ export function RouterTestClient() {
           Test
         </Button>
       </form>
+      <div className="flex items-center gap-2">
+        <Checkbox
+          id="devMode"
+          checked={devMode}
+          onCheckedChange={(checked) => setDevMode(checked === true)}
+        />
+        <label htmlFor="devMode" className="text-sm">
+          Dev Mode
+        </label>
+      </div>
       {result && (
         <div className="rounded-md border bg-muted p-4 font-mono text-sm">
           {result}

@@ -1,7 +1,7 @@
 "use server";
 
 import { randomUUID } from "crypto";
-import { redirect } from "next/navigation";
+import { redirect, notFound } from "next/navigation";
 import { cookies, headers } from "next/headers";
 import { devModeFlag, shortnameDevInterface } from "~/server/flags";
 
@@ -54,43 +54,104 @@ export async function getCurrentPath() {
 
 const rootDomain = "wahlen.djl.foundation";
 
-const catchPathsRegex = new RegExp(`^(\/|\/wahl\/.*)$`);
+const onlyCatchDomainPages = [
+  "/page",
+  "/[catchoneroute]",
+  "/[...catchallfollowing]",
+  "/(ignore)",
+];
 
-export async function handleRouting(targetPath: string, string = false) {
+const allowBooth = ["/booth1", "/booth2"];
+
+function matchesNextJsSyntax(path: string, patterns: string[]): boolean {
+  return patterns.some((pattern) => {
+    if (pattern.startsWith("[...") && pattern.endsWith("]")) {
+      // Match recursive catch-all routes
+      const base = pattern.slice(4, -1);
+      return path.startsWith(base);
+    } else if (pattern.startsWith("[") && pattern.endsWith("]")) {
+      // Match single dynamic routes
+      const base = pattern.slice(1, -1);
+      return path === base || path.startsWith(`${base}/`);
+    } else {
+      // Match static routes
+      return path === pattern;
+    }
+  });
+}
+
+export async function handleRouting(
+  targetPath: string,
+  string = false,
+  overwriteDevModeDisabled = false,
+) {
   const headers = await getHeaders();
-  const dev = await devModeFlag();
-  const shortname = await shortnameOverwrite();
+  const dev = overwriteDevModeDisabled ? false : await devModeFlag();
+  const shortname = await getShortname();
+  const isCatchDomain =
+    shortname?.endsWith(".wahl.djl.foundation") ||
+    (headers.host && headers.host.endsWith(".wahl.djl.foundation"));
+  const isRootDomain = headers.host === rootDomain;
 
-  if (dev || shortname) {
+  if (isRootDomain) {
+    if (
+      matchesNextJsSyntax(targetPath, onlyCatchDomainPages) &&
+      !matchesNextJsSyntax(targetPath, allowBooth)
+    ) {
+      notFound();
+      return;
+    }
     if (string) return targetPath;
     redirect(targetPath);
-  } else {
-    if (headers.host !== rootDomain) {
-      if (targetPath !== catchPathsRegex.source) {
-        if (string) return rootDomain + targetPath;
-        redirect(rootDomain + targetPath);
+  } else if (isCatchDomain) {
+    if (
+      !matchesNextJsSyntax(targetPath, onlyCatchDomainPages) &&
+      !matchesNextJsSyntax(targetPath, allowBooth)
+    ) {
+      if (dev) {
+        if (string) return targetPath;
+        redirect(targetPath);
       } else {
-        if (string) return headers.host + targetPath;
-        redirect(headers.host + targetPath);
+        if (string) return `${rootDomain}${targetPath}`;
+        redirect(`${rootDomain}${targetPath}`);
       }
     } else {
       if (string) return targetPath;
       redirect(targetPath);
     }
+  } else {
+    if (string) return targetPath;
+    redirect(targetPath);
   }
 }
 
 export async function cleanup() {
+  const headers = await getHeaders();
   const path = await getCurrentPath();
   const dev = await devModeFlag();
-  const shortname = await shortnameOverwrite();
+  const shortname = await getShortname();
+  const isCatchDomain =
+    shortname?.endsWith(".wahl.djl.foundation") ||
+    (headers.host && headers.host.endsWith(".wahl.djl.foundation"));
+  const isRootDomain = headers.host === rootDomain;
 
-  if (catchPathsRegex.test(path)) {
-    if (dev || shortname) {
+  if (isRootDomain) {
+    if (
+      matchesNextJsSyntax(path, onlyCatchDomainPages) &&
+      !matchesNextJsSyntax(path, allowBooth)
+    ) {
+      notFound();
       return;
-    } else {
-      const url = new URL(`https://${rootDomain}/${path}`);
-      redirect(url.toString());
+    }
+  } else if (isCatchDomain) {
+    if (
+      !matchesNextJsSyntax(path, onlyCatchDomainPages) &&
+      !matchesNextJsSyntax(path, allowBooth)
+    ) {
+      if (!dev) {
+        const url = new URL(`${rootDomain}${path}`);
+        redirect(url.toString());
+      }
     }
   }
 }
