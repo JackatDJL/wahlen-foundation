@@ -5,6 +5,7 @@ import {
   createTRPCRouter,
   protectedProcedure,
   publicProcedure,
+  secureCronProcedure,
 } from "~/server/api/trpc";
 
 import { db } from "~/server/db";
@@ -29,27 +30,27 @@ const setInternalQuestionFileType = z.object({
   fileId: z.string().uuid().nullable(),
 });
 
-type setInternalQuestionFileReturnTypes =
+type SetInternalQuestionFileReturnTypes =
   | typeof questionInfo.$inferSelect
   | typeof questionTrueFalse.$inferSelect
   | typeof questionMultipleChoice.$inferSelect;
 
-enum setInternalQuestionFileErrorTypes {
+enum SetInternalQuestionFileErrorTypes {
   NotFound = "NotFound",
   UpdateFailed = "UpdateFailed",
   InputTypeError = "InputTypeError",
 }
 
-type setInternalQuestionFileError =
+type SetInternalQuestionFileError =
   | {
       type: Exclude<
-        setInternalQuestionFileErrorTypes,
-        setInternalQuestionFileErrorTypes.InputTypeError
+        SetInternalQuestionFileErrorTypes,
+        SetInternalQuestionFileErrorTypes.InputTypeError
       >;
       message: string;
     }
   | {
-      type: setInternalQuestionFileErrorTypes.InputTypeError;
+      type: SetInternalQuestionFileErrorTypes.InputTypeError;
       message: string;
       zodError: z.ZodError;
     };
@@ -81,7 +82,7 @@ async function setInternalQuestionFile({
   answerId,
   fileId,
 }: z.infer<typeof setInternalQuestionFileType>): Promise<
-  Result<setInternalQuestionFileReturnTypes, setInternalQuestionFileError>
+  Result<SetInternalQuestionFileReturnTypes, SetInternalQuestionFileError>
 > {
   const { success, error } = setInternalQuestionFileType.safeParse({
     type,
@@ -91,7 +92,7 @@ async function setInternalQuestionFile({
   });
   if (!success) {
     return err({
-      type: setInternalQuestionFileErrorTypes.InputTypeError,
+      type: SetInternalQuestionFileErrorTypes.InputTypeError,
       message: "Input is not of valid Type",
       zodError: error,
     });
@@ -113,7 +114,7 @@ async function setInternalQuestionFile({
       if (iIResError) {
         console.error(iIResError);
         return err({
-          type: setInternalQuestionFileErrorTypes.UpdateFailed,
+          type: SetInternalQuestionFileErrorTypes.UpdateFailed,
           message: "Failed to update question",
         });
       }
@@ -122,7 +123,7 @@ async function setInternalQuestionFile({
 
       if (!iIRes) {
         return err({
-          type: setInternalQuestionFileErrorTypes.NotFound,
+          type: SetInternalQuestionFileErrorTypes.NotFound,
           message: "Question not found",
         });
       }
@@ -137,7 +138,7 @@ async function setInternalQuestionFile({
       if (tFQuestionsError) {
         console.error(tFQuestionsError);
         return err({
-          type: setInternalQuestionFileErrorTypes.UpdateFailed,
+          type: SetInternalQuestionFileErrorTypes.UpdateFailed,
           message: "Failed to update question",
         });
       }
@@ -146,7 +147,7 @@ async function setInternalQuestionFile({
 
       if (!tFQuestions) {
         return err({
-          type: setInternalQuestionFileErrorTypes.NotFound,
+          type: SetInternalQuestionFileErrorTypes.NotFound,
           message: "Question not found",
         });
       }
@@ -167,7 +168,7 @@ async function setInternalQuestionFile({
           if (tFo1ResError) {
             console.error(tFo1ResError);
             return err({
-              type: setInternalQuestionFileErrorTypes.UpdateFailed,
+              type: SetInternalQuestionFileErrorTypes.UpdateFailed,
               message: "Failed to update question",
             });
           }
@@ -176,7 +177,7 @@ async function setInternalQuestionFile({
 
           if (!tFo1Res) {
             return err({
-              type: setInternalQuestionFileErrorTypes.NotFound,
+              type: SetInternalQuestionFileErrorTypes.NotFound,
               message: "Answer not found",
             });
           }
@@ -196,7 +197,7 @@ async function setInternalQuestionFile({
           if (tFo2ResError) {
             console.error(tFo2ResError);
             return err({
-              type: setInternalQuestionFileErrorTypes.UpdateFailed,
+              type: SetInternalQuestionFileErrorTypes.UpdateFailed,
               message: "Failed to update question",
             });
           }
@@ -205,14 +206,14 @@ async function setInternalQuestionFile({
 
           if (!tFo2Res) {
             return err({
-              type: setInternalQuestionFileErrorTypes.NotFound,
+              type: SetInternalQuestionFileErrorTypes.NotFound,
               message: "Answer not found",
             });
           }
           return ok(tFo2Res);
         default:
           return err({
-            type: setInternalQuestionFileErrorTypes.NotFound,
+            type: SetInternalQuestionFileErrorTypes.NotFound,
             message: "Answer not found",
           });
       }
@@ -226,7 +227,7 @@ async function setInternalQuestionFile({
       if (mCQuestionsError) {
         console.error(mCQuestionsError);
         return err({
-          type: setInternalQuestionFileErrorTypes.UpdateFailed,
+          type: SetInternalQuestionFileErrorTypes.UpdateFailed,
           message: "Failed to update question",
         });
       }
@@ -234,7 +235,7 @@ async function setInternalQuestionFile({
       const mCQuestions = mCQuestionsArray ? mCQuestionsArray[0] : undefined;
       if (!mCQuestions?.content) {
         return err({
-          type: setInternalQuestionFileErrorTypes.NotFound,
+          type: SetInternalQuestionFileErrorTypes.NotFound,
           message: "Question not found",
         });
       }
@@ -242,7 +243,7 @@ async function setInternalQuestionFile({
       const answerIds = mCQuestions.content.map((a) => a.id);
       if (!answerIds.includes(answerId)) {
         return err({
-          type: setInternalQuestionFileErrorTypes.NotFound,
+          type: SetInternalQuestionFileErrorTypes.NotFound,
           message: "Answer not found",
         });
       }
@@ -258,7 +259,7 @@ async function setInternalQuestionFile({
       });
       if (!editedContent.length) {
         return err({
-          type: setInternalQuestionFileErrorTypes.NotFound,
+          type: SetInternalQuestionFileErrorTypes.NotFound,
           message: "Answer not found",
         });
       }
@@ -277,7 +278,7 @@ async function setInternalQuestionFile({
       if (mcResError) {
         console.error(mcResError);
         return err({
-          type: setInternalQuestionFileErrorTypes.UpdateFailed,
+          type: SetInternalQuestionFileErrorTypes.UpdateFailed,
           message: "Failed to update question",
         });
       }
@@ -286,7 +287,7 @@ async function setInternalQuestionFile({
 
       if (!mcRes) {
         return err({
-          type: setInternalQuestionFileErrorTypes.NotFound,
+          type: SetInternalQuestionFileErrorTypes.NotFound,
           message: "Question not found",
         });
       }
@@ -294,7 +295,7 @@ async function setInternalQuestionFile({
       return ok(mcRes);
     default:
       return err({
-        type: setInternalQuestionFileErrorTypes.NotFound,
+        type: SetInternalQuestionFileErrorTypes.NotFound,
         message: "Question not found",
       });
   }
@@ -305,27 +306,27 @@ const deleteInternalQuestionFileType = z.object({
   answerId: z.string().uuid(),
 });
 
-type deleteInternalQuestionFileReturnTypes =
+type DeleteInternalQuestionFileReturnTypes =
   | typeof questionInfo.$inferSelect
   | typeof questionTrueFalse.$inferSelect
   | typeof questionMultipleChoice.$inferSelect;
 
-enum deleteInternalQuestionFileErrorTypes {
+enum DeleteInternalQuestionFileErrorTypes {
   NotFound = "NotFound",
   UpdateFailed = "UpdateFailed",
   InputTypeError = "InputTypeError",
 }
 
-type deleteInternalQuestionFileError =
+type DeleteInternalQuestionFileError =
   | {
       type: Exclude<
-        deleteInternalQuestionFileErrorTypes,
-        deleteInternalQuestionFileErrorTypes.InputTypeError
+        DeleteInternalQuestionFileErrorTypes,
+        DeleteInternalQuestionFileErrorTypes.InputTypeError
       >;
       message: string;
     }
   | {
-      type: deleteInternalQuestionFileErrorTypes.InputTypeError;
+      type: DeleteInternalQuestionFileErrorTypes.InputTypeError;
       message: string;
       zodError: z.ZodError;
     };
@@ -349,7 +350,7 @@ async function removeInternalQuestionFile({
   questionId,
   answerId,
 }: z.infer<typeof deleteInternalQuestionFileType>): Promise<
-  Result<deleteInternalQuestionFileReturnTypes, deleteInternalQuestionFileError>
+  Result<DeleteInternalQuestionFileReturnTypes, DeleteInternalQuestionFileError>
 > {
   const { success, error } = deleteInternalQuestionFileType.safeParse({
     questionId,
@@ -357,7 +358,7 @@ async function removeInternalQuestionFile({
   });
   if (!success) {
     return err({
-      type: deleteInternalQuestionFileErrorTypes.InputTypeError,
+      type: DeleteInternalQuestionFileErrorTypes.InputTypeError,
       message: "Input is not of valid Type",
       zodError: error,
     });
@@ -369,7 +370,7 @@ async function removeInternalQuestionFile({
   if (dbresponseError) {
     console.error(dbresponseError);
     return err({
-      type: deleteInternalQuestionFileErrorTypes.UpdateFailed,
+      type: DeleteInternalQuestionFileErrorTypes.UpdateFailed,
       message: "Failed to update question",
     });
   }
@@ -377,7 +378,7 @@ async function removeInternalQuestionFile({
   const dbresponse = dbresponseArray ? dbresponseArray[0] : undefined;
   if (!dbresponse) {
     return err({
-      type: deleteInternalQuestionFileErrorTypes.NotFound,
+      type: DeleteInternalQuestionFileErrorTypes.NotFound,
       message: "Question not found",
     });
   }
@@ -398,7 +399,7 @@ async function removeInternalQuestionFile({
       if (iIResError) {
         console.error(iIResError);
         return err({
-          type: deleteInternalQuestionFileErrorTypes.UpdateFailed,
+          type: DeleteInternalQuestionFileErrorTypes.UpdateFailed,
           message: "Failed to update question",
         });
       }
@@ -406,7 +407,7 @@ async function removeInternalQuestionFile({
       const iIRes = iIResArray ? iIResArray[0] : undefined;
       if (!iIRes) {
         return err({
-          type: deleteInternalQuestionFileErrorTypes.NotFound,
+          type: DeleteInternalQuestionFileErrorTypes.NotFound,
           message: "Question not found",
         });
       }
@@ -421,7 +422,7 @@ async function removeInternalQuestionFile({
       )[0];
       if (!tFQuestions) {
         return err({
-          type: deleteInternalQuestionFileErrorTypes.NotFound,
+          type: DeleteInternalQuestionFileErrorTypes.NotFound,
           message: "Question not found",
         });
       }
@@ -441,7 +442,7 @@ async function removeInternalQuestionFile({
           if (tFo1ResError) {
             console.error(tFo1ResError);
             return err({
-              type: deleteInternalQuestionFileErrorTypes.UpdateFailed,
+              type: DeleteInternalQuestionFileErrorTypes.UpdateFailed,
               message: "Failed to update question",
             });
           }
@@ -449,7 +450,7 @@ async function removeInternalQuestionFile({
           const tFo1Res = tFo1ResArray ? tFo1ResArray[0] : undefined;
           if (!tFo1Res) {
             return err({
-              type: deleteInternalQuestionFileErrorTypes.NotFound,
+              type: DeleteInternalQuestionFileErrorTypes.NotFound,
               message: "Answer not found",
             });
           }
@@ -470,7 +471,7 @@ async function removeInternalQuestionFile({
           if (tFo2ResError) {
             console.error(tFo2ResError);
             return err({
-              type: deleteInternalQuestionFileErrorTypes.UpdateFailed,
+              type: DeleteInternalQuestionFileErrorTypes.UpdateFailed,
               message: "Failed to update question",
             });
           }
@@ -478,7 +479,7 @@ async function removeInternalQuestionFile({
           const tFo2Res = tFo2ResArray ? tFo2ResArray[0] : undefined;
           if (!tFo2Res) {
             return err({
-              type: deleteInternalQuestionFileErrorTypes.NotFound,
+              type: DeleteInternalQuestionFileErrorTypes.NotFound,
               message: "Answer not found",
             });
           }
@@ -486,7 +487,7 @@ async function removeInternalQuestionFile({
           return ok(tFo2Res);
         default:
           return err({
-            type: deleteInternalQuestionFileErrorTypes.NotFound,
+            type: DeleteInternalQuestionFileErrorTypes.NotFound,
             message: "Answer not found",
           });
       }
@@ -500,7 +501,7 @@ async function removeInternalQuestionFile({
       if (mCQuestionsError) {
         console.error(mCQuestionsError);
         return err({
-          type: deleteInternalQuestionFileErrorTypes.UpdateFailed,
+          type: DeleteInternalQuestionFileErrorTypes.UpdateFailed,
           message: "Failed to update question",
         });
       }
@@ -508,7 +509,7 @@ async function removeInternalQuestionFile({
       const mCQuestions = mCQuestionsArray ? mCQuestionsArray[0] : undefined;
       if (!mCQuestions?.content) {
         return err({
-          type: deleteInternalQuestionFileErrorTypes.NotFound,
+          type: DeleteInternalQuestionFileErrorTypes.NotFound,
           message: "Question not found",
         });
       }
@@ -516,7 +517,7 @@ async function removeInternalQuestionFile({
       const answerIds = mCQuestions.content?.map((a) => a.id);
       if (!answerIds?.includes(answerId)) {
         return err({
-          type: deleteInternalQuestionFileErrorTypes.NotFound,
+          type: DeleteInternalQuestionFileErrorTypes.NotFound,
           message: "Answer not found",
         });
       }
@@ -531,7 +532,7 @@ async function removeInternalQuestionFile({
       });
       if (!editedContent?.length) {
         return err({
-          type: deleteInternalQuestionFileErrorTypes.NotFound,
+          type: DeleteInternalQuestionFileErrorTypes.NotFound,
           message: "Answer not found",
         });
       }
@@ -550,7 +551,7 @@ async function removeInternalQuestionFile({
       if (mcResError) {
         console.error(mcResError);
         return err({
-          type: deleteInternalQuestionFileErrorTypes.UpdateFailed,
+          type: DeleteInternalQuestionFileErrorTypes.UpdateFailed,
           message: "Failed to update question",
         });
       }
@@ -558,7 +559,7 @@ async function removeInternalQuestionFile({
       const mcRes = mcResArray ? mcResArray[0] : undefined;
       if (!mcRes) {
         return err({
-          type: deleteInternalQuestionFileErrorTypes.NotFound,
+          type: DeleteInternalQuestionFileErrorTypes.NotFound,
           message: "Question not found",
         });
       }
@@ -566,7 +567,7 @@ async function removeInternalQuestionFile({
       return ok(mcRes);
     default:
       return err({
-        type: deleteInternalQuestionFileErrorTypes.NotFound,
+        type: DeleteInternalQuestionFileErrorTypes.NotFound,
         message: "Question not found",
       });
   }
@@ -574,7 +575,7 @@ async function removeInternalQuestionFile({
 
 const uuidType = z.string().uuid();
 
-enum deleteByIdErrorTypes {
+enum DeleteByIdErrorTypes {
   notFound = "NotFound",
   trancending = "TrancendingServers",
   noProviderIdentifier = "NoProviderIdentifier",
@@ -582,13 +583,13 @@ enum deleteByIdErrorTypes {
   InputTypeError = "InputTypeError",
 }
 
-type deleteByIdError =
+type DeleteByIdError =
   | {
-      type: Exclude<deleteByIdErrorTypes, deleteByIdErrorTypes.InputTypeError>;
+      type: Exclude<DeleteByIdErrorTypes, DeleteByIdErrorTypes.InputTypeError>;
       message: string;
     }
   | {
-      type: deleteByIdErrorTypes.InputTypeError;
+      type: DeleteByIdErrorTypes.InputTypeError;
       message: string;
       zodError: z.ZodError;
     };
@@ -610,11 +611,11 @@ type deleteByIdError =
  */
 export async function deleteById(
   input: z.infer<typeof uuidType>,
-): Promise<Result<void, deleteByIdError>> {
+): Promise<Result<void, DeleteByIdError>> {
   const { success, error } = uuidType.safeParse(input);
   if (!success) {
     return err({
-      type: deleteByIdErrorTypes.InputTypeError,
+      type: DeleteByIdErrorTypes.InputTypeError,
       message: "Input is not a valid UUID",
       zodError: error,
     });
@@ -630,7 +631,7 @@ export async function deleteById(
   if (dbGetError) {
     console.error(dbGetError);
     return err({
-      type: deleteByIdErrorTypes.DeleteFailed,
+      type: DeleteByIdErrorTypes.DeleteFailed,
       message: "Failed to Query file",
     });
   }
@@ -638,14 +639,14 @@ export async function deleteById(
   let file = fileArray ? fileArray[0] : undefined;
   if (!file) {
     return err({
-      type: deleteByIdErrorTypes.notFound,
+      type: DeleteByIdErrorTypes.notFound,
       message: "File not found",
     });
   }
 
   if (file.transferStatus === "in progress") {
     return err({
-      type: deleteByIdErrorTypes.trancending,
+      type: DeleteByIdErrorTypes.trancending,
       message: "File is currently being transcending Servers",
     });
   }
@@ -663,14 +664,14 @@ export async function deleteById(
     if (dbUpdateError) {
       console.error(dbUpdateError);
       return err({
-        type: deleteByIdErrorTypes.DeleteFailed,
+        type: DeleteByIdErrorTypes.DeleteFailed,
         message: "Failed to Update file",
       });
     }
     file = newFileArray ? newFileArray[0] : undefined;
     if (!file) {
       return err({
-        type: deleteByIdErrorTypes.notFound,
+        type: DeleteByIdErrorTypes.notFound,
         message: "File not found",
       });
     }
@@ -680,14 +681,14 @@ export async function deleteById(
     case "utfs":
       if (!file.ufsKey) {
         return err({
-          type: deleteByIdErrorTypes.noProviderIdentifier,
+          type: DeleteByIdErrorTypes.noProviderIdentifier,
           message: "No UfsKey Provided",
         });
       }
       const deletionResponse = await utapi.deleteFiles(file.ufsKey);
       if (!deletionResponse.success || deletionResponse.deletedCount !== 1) {
         return err({
-          type: deleteByIdErrorTypes.DeleteFailed,
+          type: DeleteByIdErrorTypes.DeleteFailed,
           message: "Failed to delete file",
         });
       }
@@ -695,7 +696,7 @@ export async function deleteById(
     case "blob":
       if (!file.blobPath) {
         return err({
-          type: deleteByIdErrorTypes.noProviderIdentifier,
+          type: DeleteByIdErrorTypes.noProviderIdentifier,
           message: "No Blob Path Provided",
         });
       }
@@ -704,7 +705,7 @@ export async function deleteById(
       if (blobDeleteError) {
         console.error(blobDeleteError);
         return err({
-          type: deleteByIdErrorTypes.DeleteFailed,
+          type: DeleteByIdErrorTypes.DeleteFailed,
           message: "Failed to delete file",
         });
       }
@@ -720,26 +721,26 @@ export async function deleteById(
   if (rmIQFResponse.isErr()) {
     if (
       rmIQFResponse.error.type ===
-      deleteInternalQuestionFileErrorTypes.InputTypeError
+      DeleteInternalQuestionFileErrorTypes.InputTypeError
     ) {
       return err({
-        type: deleteByIdErrorTypes.InputTypeError,
+        type: DeleteByIdErrorTypes.InputTypeError,
         message: "Input is not of valid Type",
         zodError: rmIQFResponse.error.zodError,
       });
     } else if (
       rmIQFResponse.error.type ===
-      deleteInternalQuestionFileErrorTypes.UpdateFailed
+      DeleteInternalQuestionFileErrorTypes.UpdateFailed
     ) {
       return err({
-        type: deleteByIdErrorTypes.DeleteFailed,
+        type: DeleteByIdErrorTypes.DeleteFailed,
         message: "Failed to update question",
       });
     } else if (
-      rmIQFResponse.error.type === deleteInternalQuestionFileErrorTypes.NotFound
+      rmIQFResponse.error.type === DeleteInternalQuestionFileErrorTypes.NotFound
     ) {
       return err({
-        type: deleteByIdErrorTypes.notFound,
+        type: DeleteByIdErrorTypes.notFound,
         message: "Question not found",
       });
     }
@@ -751,7 +752,7 @@ export async function deleteById(
   if (dbFileError) {
     console.error(dbFileError);
     return err({
-      type: deleteByIdErrorTypes.DeleteFailed,
+      type: DeleteByIdErrorTypes.DeleteFailed,
       message: "Failed to delete file",
     });
   }
@@ -761,7 +762,7 @@ export async function deleteById(
     : undefined;
   if (!dbFileResponse) {
     return err({
-      type: deleteByIdErrorTypes.notFound,
+      type: DeleteByIdErrorTypes.notFound,
       message: "File not found",
     });
   }
@@ -782,35 +783,35 @@ const createFileType = z.object({
   owner: z.string().length(32),
 });
 
-export type createFileReturnTypes = {
+export type CreateFileReturnTypes = {
   file: typeof files.$inferSelect;
-  question: setInternalQuestionFileReturnTypes;
+  question: SetInternalQuestionFileReturnTypes;
 };
 
-export enum createFileErrorTypes {
+export enum CreateFileErrorTypes {
   NotFound = "NotFound",
   UpdateFailed = "UpdateFailed",
   Disallowed = "Disallowed",
 }
 
-export type createFileError = {
-  type: createFileErrorTypes;
+export type CreateFileError = {
+  type: CreateFileErrorTypes;
   message: string;
 };
 
-type getFileReturnTypes = typeof files.$inferSelect;
+type GetFileReturnTypes = typeof files.$inferSelect;
 
-enum getFileErrorTypes {
+enum GetFileErrorTypes {
   NotFound = "NotFound",
   RequestFailed = "RequestFailed",
 }
 
-type getFileError = {
-  type: getFileErrorTypes;
+type GetFileError = {
+  type: GetFileErrorTypes;
   message: string;
 };
 
-enum runFileTransfersErrorTypes {
+enum RunFileTransfersErrorTypes {
   NotFound = "NotFound",
   RequestFailed = "RequestFailed",
   TransferFailed = "TransferFailed",
@@ -820,8 +821,8 @@ enum runFileTransfersErrorTypes {
   DeleteFailed = "DeleteFailed",
 }
 
-type runFileTransfersError = {
-  type: runFileTransfersErrorTypes;
+type RunFileTransfersError = {
+  type: RunFileTransfersErrorTypes;
   message: string;
 };
 
@@ -831,11 +832,11 @@ export const fileRouter = createTRPCRouter({
     .query(
       async ({
         input,
-      }): Promise<Result<createFileReturnTypes, createFileError>> => {
+      }): Promise<Result<CreateFileReturnTypes, CreateFileError>> => {
         const tIA = await throwIfActive(input.questionId);
         if (tIA.isErr()) {
           return err({
-            type: createFileErrorTypes.Disallowed,
+            type: CreateFileErrorTypes.Disallowed,
             message: "Question is currently active",
           });
         }
@@ -845,7 +846,7 @@ export const fileRouter = createTRPCRouter({
         if (wahlError) {
           console.error(wahlError);
           return err({
-            type: createFileErrorTypes.UpdateFailed,
+            type: CreateFileErrorTypes.UpdateFailed,
             message: "Failed to update question",
           });
         }
@@ -853,7 +854,7 @@ export const fileRouter = createTRPCRouter({
         const wahl = wahlArray ? wahlArray[0] : undefined;
         if (!wahl) {
           return err({
-            type: createFileErrorTypes.NotFound,
+            type: CreateFileErrorTypes.NotFound,
             message: "Question not found",
           });
         }
@@ -864,7 +865,7 @@ export const fileRouter = createTRPCRouter({
         if (questionError) {
           console.error(questionError);
           return err({
-            type: createFileErrorTypes.UpdateFailed,
+            type: CreateFileErrorTypes.UpdateFailed,
             message: "Failed to update question",
           });
         }
@@ -872,7 +873,7 @@ export const fileRouter = createTRPCRouter({
         const question = questionArray ? questionArray[0] : undefined;
         if (!question) {
           return err({
-            type: createFileErrorTypes.NotFound,
+            type: CreateFileErrorTypes.NotFound,
             message: "Question not found",
           });
         }
@@ -906,7 +907,7 @@ export const fileRouter = createTRPCRouter({
         if (dbError) {
           console.error(dbError);
           return err({
-            type: createFileErrorTypes.UpdateFailed,
+            type: CreateFileErrorTypes.UpdateFailed,
             message: "Failed to update question",
           });
         }
@@ -914,7 +915,7 @@ export const fileRouter = createTRPCRouter({
         const response = responseArray ? responseArray[0] : undefined;
         if (!response) {
           return err({
-            type: createFileErrorTypes.UpdateFailed,
+            type: CreateFileErrorTypes.UpdateFailed,
             message: "Failed to update question",
           });
         }
@@ -928,15 +929,15 @@ export const fileRouter = createTRPCRouter({
         if (questionMutation.isErr()) {
           if (
             questionMutation.error.type ===
-            setInternalQuestionFileErrorTypes.InputTypeError
+            SetInternalQuestionFileErrorTypes.InputTypeError
           ) {
             return err({
-              type: createFileErrorTypes.UpdateFailed,
+              type: CreateFileErrorTypes.UpdateFailed,
               message: "Failed to update question",
             });
           } else {
             return err({
-              type: createFileErrorTypes.UpdateFailed,
+              type: CreateFileErrorTypes.UpdateFailed,
               message: "Failed to update question",
             });
           }
@@ -951,7 +952,7 @@ export const fileRouter = createTRPCRouter({
   get: publicProcedure
     .input(uuidType)
     .query(
-      async ({ input }): Promise<Result<getFileReturnTypes, getFileError>> => {
+      async ({ input }): Promise<Result<GetFileReturnTypes, GetFileError>> => {
         const { data: fileArray, error: dbGetError } = await tc(
           db
             .select()
@@ -962,7 +963,7 @@ export const fileRouter = createTRPCRouter({
         if (dbGetError) {
           console.error(dbGetError);
           return err({
-            type: getFileErrorTypes.RequestFailed,
+            type: GetFileErrorTypes.RequestFailed,
             message: "Failed to Query file",
           });
         }
@@ -970,7 +971,7 @@ export const fileRouter = createTRPCRouter({
         const file = fileArray ? fileArray[0] : undefined;
         if (!file) {
           return err({
-            type: getFileErrorTypes.NotFound,
+            type: GetFileErrorTypes.NotFound,
             message: "File not found",
           });
         }
@@ -984,8 +985,8 @@ export const fileRouter = createTRPCRouter({
   }),
 
   transfers: createTRPCRouter({
-    run: publicProcedure.mutation(
-      async (): Promise<Result<void, runFileTransfersError>> => {
+    run: secureCronProcedure.mutation(
+      async (): Promise<Result<void, RunFileTransfersError>> => {
         // SERVER
         // First set all the files wo are idle and storedIn !== targetStorage to queued
         // This will probably only be called if i manually move around files between storage services
@@ -1008,7 +1009,7 @@ export const fileRouter = createTRPCRouter({
         if (dbInitiateStatusError) {
           console.error(dbInitiateStatusError);
           return err({
-            type: runFileTransfersErrorTypes.RequestFailed,
+            type: RunFileTransfersErrorTypes.RequestFailed,
             message: "Failed to update file status",
           });
         }
@@ -1031,7 +1032,7 @@ export const fileRouter = createTRPCRouter({
         if (dbResetSameStorageError) {
           console.error(dbResetSameStorageError);
           return err({
-            type: runFileTransfersErrorTypes.RequestFailed,
+            type: RunFileTransfersErrorTypes.RequestFailed,
             message: "Failed to update file status",
           });
         }
@@ -1042,7 +1043,7 @@ export const fileRouter = createTRPCRouter({
         if (filesToTransferError) {
           console.error(filesToTransferError);
           return err({
-            type: runFileTransfersErrorTypes.RequestFailed,
+            type: RunFileTransfersErrorTypes.RequestFailed,
             message: "Failed to retrieve files to transfer",
           });
         }
@@ -1062,7 +1063,7 @@ export const fileRouter = createTRPCRouter({
           if (SetStatusError) {
             console.error(SetStatusError);
             return err({
-              type: runFileTransfersErrorTypes.TransferFailed,
+              type: RunFileTransfersErrorTypes.TransferFailed,
               message: "Failed to update file status",
             });
           }
@@ -1073,7 +1074,7 @@ export const fileRouter = createTRPCRouter({
           if (FetchError) {
             console.error(FetchError);
             return err({
-              type: runFileTransfersErrorTypes.TransferFailed,
+              type: RunFileTransfersErrorTypes.TransferFailed,
               message: "Failed to fetch file blob",
             });
           }
@@ -1095,12 +1096,12 @@ export const fileRouter = createTRPCRouter({
             if (AbortError) {
               console.error(AbortError);
               return err({
-                type: runFileTransfersErrorTypes.TransferFailed,
+                type: RunFileTransfersErrorTypes.TransferFailed,
                 message: "Failed to update file status",
               });
             }
             return err({
-              type: runFileTransfersErrorTypes.BlobCorrupted,
+              type: RunFileTransfersErrorTypes.BlobCorrupted,
               message: "Blob is corrupted",
             });
           }
@@ -1113,21 +1114,21 @@ export const fileRouter = createTRPCRouter({
               if (up_utfs_error) {
                 console.error(up_utfs_error);
                 return err({
-                  type: runFileTransfersErrorTypes.UploadFailed,
+                  type: RunFileTransfersErrorTypes.UploadFailed,
                   message: "Failed to upload file",
                 });
               }
               if (!up_utfs_response.data?.key) {
                 console.error("No Key Provided");
                 return err({
-                  type: runFileTransfersErrorTypes.NoProviderIdentifier,
+                  type: RunFileTransfersErrorTypes.NoProviderIdentifier,
                   message: "No Key Provided",
                 });
               }
               if (!up_utfs_response.data?.ufsUrl) {
                 console.error("No URL Provided");
                 return err({
-                  type: runFileTransfersErrorTypes.NoProviderIdentifier,
+                  type: RunFileTransfersErrorTypes.NoProviderIdentifier,
                   message: "No URL Provided",
                 });
               }
@@ -1146,7 +1147,7 @@ export const fileRouter = createTRPCRouter({
               if (dbUpdateFileLocationError) {
                 console.error(dbUpdateFileLocationError);
                 return err({
-                  type: runFileTransfersErrorTypes.UploadFailed,
+                  type: RunFileTransfersErrorTypes.UploadFailed,
                   message: "Failed to update file location",
                 });
               }
@@ -1164,21 +1165,21 @@ export const fileRouter = createTRPCRouter({
               if (up_blob_error) {
                 console.error(up_blob_error);
                 return err({
-                  type: runFileTransfersErrorTypes.UploadFailed,
+                  type: RunFileTransfersErrorTypes.UploadFailed,
                   message: "Failed to upload file",
                 });
               }
               if (!up_blob_response.pathname) {
                 console.error("No Path Provided");
                 return err({
-                  type: runFileTransfersErrorTypes.NoProviderIdentifier,
+                  type: RunFileTransfersErrorTypes.NoProviderIdentifier,
                   message: "No Path Provided",
                 });
               }
               if (!up_blob_response.url) {
                 console.error("No URL Provided");
                 return err({
-                  type: runFileTransfersErrorTypes.NoProviderIdentifier,
+                  type: RunFileTransfersErrorTypes.NoProviderIdentifier,
                   message: "No URL Provided",
                 });
               }
@@ -1197,7 +1198,7 @@ export const fileRouter = createTRPCRouter({
               if (dbUpdateBlobLocationError) {
                 console.error(dbUpdateBlobLocationError);
                 return err({
-                  type: runFileTransfersErrorTypes.UploadFailed,
+                  type: RunFileTransfersErrorTypes.UploadFailed,
                   message: "Failed to update file location",
                 });
               }
@@ -1208,7 +1209,7 @@ export const fileRouter = createTRPCRouter({
             case "utfs":
               if (!file.ufsKey) {
                 return err({
-                  type: runFileTransfersErrorTypes.NoProviderIdentifier,
+                  type: RunFileTransfersErrorTypes.NoProviderIdentifier,
                   message: "No Key Provided",
                 });
               }
@@ -1218,7 +1219,7 @@ export const fileRouter = createTRPCRouter({
               if (del_utfs_error) {
                 console.error(del_utfs_error);
                 return err({
-                  type: runFileTransfersErrorTypes.DeleteFailed,
+                  type: RunFileTransfersErrorTypes.DeleteFailed,
                   message: "Failed to delete file",
                 });
               }
@@ -1228,7 +1229,7 @@ export const fileRouter = createTRPCRouter({
               ) {
                 console.error("Failed to delete file");
                 return err({
-                  type: runFileTransfersErrorTypes.DeleteFailed,
+                  type: RunFileTransfersErrorTypes.DeleteFailed,
                   message: "Failed to delete file",
                 });
               }
@@ -1246,7 +1247,7 @@ export const fileRouter = createTRPCRouter({
               if (dbDelUtfsError) {
                 console.error(dbDelUtfsError);
                 return err({
-                  type: runFileTransfersErrorTypes.DeleteFailed,
+                  type: RunFileTransfersErrorTypes.DeleteFailed,
                   message: "Failed to delete file",
                 });
               }
@@ -1254,7 +1255,7 @@ export const fileRouter = createTRPCRouter({
             case "blob":
               if (!file.blobPath) {
                 return err({
-                  type: runFileTransfersErrorTypes.NoProviderIdentifier,
+                  type: RunFileTransfersErrorTypes.NoProviderIdentifier,
                   message: "No Path Provided",
                 });
               }
@@ -1263,7 +1264,7 @@ export const fileRouter = createTRPCRouter({
               if (del_blob_error) {
                 console.error(del_blob_error);
                 return err({
-                  type: runFileTransfersErrorTypes.DeleteFailed,
+                  type: RunFileTransfersErrorTypes.DeleteFailed,
                   message: "Failed to delete file",
                 });
               }
@@ -1281,7 +1282,7 @@ export const fileRouter = createTRPCRouter({
               if (dbDelBlobError) {
                 console.error(dbDelBlobError);
                 return err({
-                  type: runFileTransfersErrorTypes.DeleteFailed,
+                  type: RunFileTransfersErrorTypes.DeleteFailed,
                   message: "Failed to delete file",
                 });
               }
@@ -1303,7 +1304,7 @@ export const fileRouter = createTRPCRouter({
           if (dbUpdateStatusError) {
             console.error(dbUpdateStatusError);
             return err({
-              type: runFileTransfersErrorTypes.RequestFailed,
+              type: RunFileTransfersErrorTypes.RequestFailed,
               message: "Failed to update file status",
             });
           }

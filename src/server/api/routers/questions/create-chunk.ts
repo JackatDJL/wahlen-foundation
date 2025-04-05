@@ -133,10 +133,10 @@ export const chunkProcedure = protectedProcedure
               continue;
             }
 
-            const InfoResponse = infoResponseArray
+            const infoResponse = infoResponseArray
               ? infoResponseArray[0]
               : null;
-            if (!InfoResponse) {
+            if (!infoResponse) {
               responses.push(
                 err({
                   type: CreateChunkErrorTypes.Failed,
@@ -146,7 +146,7 @@ export const chunkProcedure = protectedProcedure
               continue;
             }
 
-            responses.push(ok(InfoResponse));
+            responses.push(ok(infoResponse));
             break;
           }
 
