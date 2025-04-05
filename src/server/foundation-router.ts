@@ -22,6 +22,18 @@ async function shortnameOverwrite() {
   }
 }
 
+export async function getShortname() {
+  const overwrite = await shortnameOverwrite();
+  const headers = await getHeaders();
+  if (overwrite) return overwrite;
+  if (headers.host !== rootDomain) {
+    return null;
+  } else {
+    const shortname = headers.host.split(".")[0];
+    return shortname;
+  }
+}
+
 export async function getHeaders() {
   const headerList = await headers();
   const headersObject: Record<string, string> = {};
@@ -58,10 +70,10 @@ export async function handleRouting(
   } else {
     if (headers.host !== rootDomain) {
       if (targetPath !== catchPathsRegex.source) {
-        if (string) return targetPath;
+        if (string) return rootDomain + targetPath;
         redirect(rootDomain + targetPath);
       } else {
-        if (string) return targetPath;
+        if (string) return headers.host + targetPath;
         redirect(headers.host + targetPath);
       }
     } else {
