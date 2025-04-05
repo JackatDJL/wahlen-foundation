@@ -50,11 +50,6 @@ const alertType = z.object({
   message: z.string().min(3).max(256).optional(),
 });
 
-const alertType = z.object({
-  type: z.enum(["info", "warning", "error"]),
-  message: z.string().min(3).max(256).optional(),
-});
-
 const queueWahlType = z.object({
   id: z.string().uuid(),
 
