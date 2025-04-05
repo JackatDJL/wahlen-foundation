@@ -56,10 +56,7 @@ const rootDomain = "wahlen.djl.foundation";
 
 const catchPathsRegex = new RegExp(`^(\/|\/wahl\/.*)$`);
 
-export async function handleRouting(
-  targetPath: string,
-  string: boolean = false,
-) {
+export async function handleRouting(targetPath: string, string = false) {
   const headers = await getHeaders();
   const dev = await devModeFlag();
   const shortname = await shortnameOverwrite();
