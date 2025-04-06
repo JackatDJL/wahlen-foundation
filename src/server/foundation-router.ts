@@ -146,7 +146,7 @@ function matchesNextJsSyntax(path: string, patterns: string[]): boolean {
         const remainingPattern = segments.slice(1).join("//");
         // Check if any part of the path after the base segment matches the remaining pattern
         const pathAfterBase = path.substring(baseSegment.length);
-        if (pathAfterBase && pathAfterBase.startsWith("/")) {
+        if (pathAfterBase?.startsWith("/")) {
           const pathParts = pathAfterBase.split("/").filter(Boolean);
 
           // Try matching at each level of the path
