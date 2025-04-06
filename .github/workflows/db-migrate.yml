@@ -1,0 +1,30 @@
+name: Migrate Database 🗃️
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  db-migrate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code 🧾
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js ⚛️
+        uses: actions/setup-node@v3
+        with:
+          node-version: "16"
+
+      - name: Install dependencies 📦
+        run: npm install
+
+      - name: Pull Vercel environment variables ▲
+        env:
+          VERCEL_ENV_TOKEN: ${{ secrets.VERCEL_ENV_TOKEN }}
+        run: npx vercel env pull .env -t $VERCEL_ENV_TOKEN --environment=production
+
+      - name: Migrate the Database 🗃️
+        run: npm run db:migrate
