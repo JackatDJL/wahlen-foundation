@@ -23,7 +23,7 @@ async function shortnameOverwrite() {
 }
 
 // Function to check if a domain is a custom domain (not wahlen.djl.foundation or *.wahl.djl.foundation)
-async function fetchCustomDomain(host: string) {
+async function fetchCustomDomain(_host: string) {
   // This will be implemented later to fetch organization shortname from custom domain
   // For now, return empty string as requested
   return "";
