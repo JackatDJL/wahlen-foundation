@@ -26,7 +26,6 @@ export const forbiddenShortnames = [
   "production",
   "development",
   "testing",
-  "staging",
   "clerk",
   "auth",
   "api",
