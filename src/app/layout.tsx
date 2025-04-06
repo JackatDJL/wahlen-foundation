@@ -104,7 +104,6 @@ export default async function RootLayout({
       appearance={{
         baseTheme: dark,
       }}
-      afterSignOutUrl={env.NEXT_PUBLIC_CLERK_SIGN_OUT_FORCE_REDIRECT_URL}
     >
       <html lang="en" className={`${GeistSans.variable}`}>
         <body>

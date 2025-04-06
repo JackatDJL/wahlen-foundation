@@ -8,6 +8,7 @@ import { usePostHog } from "posthog-js/react";
 import posthog from "posthog-js";
 import { PostHogProvider as PHProvider } from "posthog-js/react";
 import { env } from "~/env";
+import { useAuth, useUser } from "@clerk/nextjs";
 
 export function PostHogProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
@@ -31,6 +32,9 @@ function PostHogPageView() {
   const searchParams = useSearchParams();
   const posthog = usePostHog();
 
+  const { isSignedIn, userId } = useAuth();
+  const { user } = useUser();
+
   // Track pageviews
   useEffect(() => {
     if (pathname && posthog) {
@@ -42,6 +46,25 @@ function PostHogPageView() {
       posthog.capture("$pageview", { $current_url: url });
     }
   }, [pathname, searchParams, posthog]);
+
+  useEffect(() => {
+    // 👉 Check the sign-in status and user info,
+    //    and identify the user if they aren't already
+    if (isSignedIn && userId && user && !posthog._isIdentified()) {
+      // 👉 Identify the user
+      posthog.identify(userId, {
+        email: user.primaryEmailAddress?.emailAddress,
+        first_name: user.firstName,
+        last_name: user.lastName,
+
+        username: user.username,
+      });
+    }
+
+    if (!isSignedIn && posthog._isIdentified()) {
+      posthog.reset();
+    }
+  }, [posthog, user, isSignedIn, userId]);
 
   return null;
 }
