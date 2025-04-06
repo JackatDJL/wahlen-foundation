@@ -18,6 +18,7 @@ import { dark } from "@clerk/themes";
 import { PostHogProvider } from "~/server/providers";
 import { env } from "~/env";
 import { VercelToolbar } from "@vercel/toolbar/next";
+import { cleanup } from "~/server/foundation-router";
 
 // Implement Metadata Images TODO
 export const metadata: Metadata = {
@@ -93,16 +94,16 @@ export const metadata: Metadata = {
   classification: "Voting Platform",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   const shouldShowVercelToolbar = env.NODE_ENV === "development";
+  await cleanup();
   return (
     <ClerkProvider
       appearance={{
         baseTheme: dark,
       }}
-      afterSignOutUrl={env.NEXT_PUBLIC_CLERK_SIGN_OUT_FORCE_REDIRECT_URL}
     >
       <html lang="en" className={`${GeistSans.variable}`}>
         <body>
