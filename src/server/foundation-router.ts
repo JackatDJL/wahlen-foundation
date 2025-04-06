@@ -22,16 +22,41 @@ async function shortnameOverwrite() {
   }
 }
 
+// Function to check if a domain is a custom domain (not wahlen.djl.foundation or *.wahl.djl.foundation)
+async function fetchCustomDomain(host: string) {
+  // This will be implemented later to fetch organization shortname from custom domain
+  // For now, return empty string as requested
+  return "";
+}
+
+/**
+ * Shortname represents the Organisation
+ * The election is path based
+ */
 export async function getShortname() {
   const overwrite = await shortnameOverwrite();
-  const headers = await getHeaders();
+  const headersList = await getHeaders();
+  const host = headersList.host || "";
+
   if (overwrite) return overwrite;
-  if (headers.host !== rootDomain) {
-    return null;
-  } else {
-    const shortname = headers.host.split(".")[0];
+
+  // Check if we're on the root domain
+  if (host === rootDomain || host.includes("vercel.app")) {
+    return "";
+  }
+
+  // Check if we're on a catch domain
+  if (host.endsWith(".wahl.djl.foundation")) {
+    const shortname = host.split(".")[0];
     return shortname;
   }
+
+  // Check if we're on a custom domain
+  if (!host.includes("localhost") && !host.includes("vercel.app")) {
+    return await fetchCustomDomain(host);
+  }
+
+  return "";
 }
 
 export async function getHeaders() {
@@ -47,111 +72,278 @@ export async function getHeaders() {
 
 export async function getCurrentPath() {
   const headersObject = await getHeaders();
-  const url = headersObject["x-clerk-clerk-url"];
+  const url = headersObject["x-url"] || headersObject["x-clerk-clerk-url"];
   const currentPath = url ? new URL(url).pathname : "/";
   return currentPath;
 }
 
 const rootDomain = "wahlen.djl.foundation";
 
-const onlyCatchDomainPages = [
-  "/page",
-  "/[catchoneroute]",
-  "/[...catchallfollowing]",
-  "/(ignore)",
+// Pages that are allowed on catch domains (organization subdomains)
+const allCatchDomainPages = [
+  "/",
+  "/dashboard",
+  "/manage//[shortname]",
+  "/wahl//[shortname]",
 ];
 
-const allowBooth = ["/booth1", "/booth2"];
+// Pages that are not allowed on the root domain
+const rootDisallowedPages = ["/wahl//[shortname]"];
 
+/**
+ * Checks if a path matches any of the provided Next.js-style patterns.
+ *
+ * Supported pattern types:
+ * 1. Static patterns: "/dashboard", "/settings"
+ *    - Matches exact paths only
+ *
+ * 2. Dynamic segments: "/users/[id]", "/manage/[shortname]"
+ *    - [param] matches any value at that segment position
+ *
+ * 3. Catch-all segments: "/docs/[...slug]", "/wahl/[shortname]/[...path]"
+ *    - [...param] matches any number of segments at that position
+ *
+ * 4. Recursive wildcards: "/manage//[shortname]", "/wahl//[shortname]//[...path]"
+ *    - // acts as a recursive wildcard
+ *    - "/manage//[shortname]" matches "/manage", "/manage/org1", "/manage/org1/settings"
+ *    - "/wahl//[shortname]//[...path]" matches "/wahl", "/wahl/election1", "/wahl/election1/results/detailed"
+ *
+ * @param {string} path - The path to check
+ * @param {string[]} patterns - Array of patterns to match against
+ * @returns {boolean} True if the path matches any of the patterns
+ *
+ * @example
+ * // Returns true
+ * matchesNextJsSyntax("/manage/org1", ["/manage/[shortname]"]);
+ *
+ * @example
+ * // Returns true for all of these paths
+ * matchesNextJsSyntax("/manage", ["/manage//[shortname]"]);
+ * matchesNextJsSyntax("/manage/org1", ["/manage//[shortname]"]);
+ * matchesNextJsSyntax("/manage/org1/settings", ["/manage//[shortname]"]);
+ */
 function matchesNextJsSyntax(path: string, patterns: string[]): boolean {
+  // For debugging
+  // console.log(`Checking if path "${path}" matches any patterns:`, patterns);
+
   return patterns.some((pattern) => {
-    if (pattern.startsWith("[...") && pattern.endsWith("]")) {
-      // Match recursive catch-all routes
-      const base = pattern.slice(4, -1);
-      return path.startsWith(base);
-    } else if (pattern.startsWith("[") && pattern.endsWith("]")) {
-      // Match single dynamic routes
-      const base = pattern.slice(1, -1);
-      return path === base || path.startsWith(`${base}/`);
-    } else {
-      // Match static routes
-      return path === pattern;
+    let isMatch = false;
+
+    // Handle recursive wildcard patterns with //
+    if (pattern.includes("//")) {
+      // Split the pattern by // to get segments
+      const segments = pattern.split("//");
+      const baseSegment = segments[0] ?? "";
+
+      // If path exactly matches or starts with the base segment, it's a match
+      if (path === baseSegment || path.startsWith(baseSegment + "/")) {
+        isMatch = true;
+      }
+
+      // For patterns with multiple // segments, check recursively
+      else if (segments.length > 2) {
+        // Reconstruct remaining pattern after first //
+        const remainingPattern = segments.slice(1).join("//");
+        // Check if any part of the path after the base segment matches the remaining pattern
+        const pathAfterBase = path.substring(baseSegment.length);
+        if (pathAfterBase && pathAfterBase.startsWith("/")) {
+          const pathParts = pathAfterBase.split("/").filter(Boolean);
+
+          // Try matching at each level of the path
+          for (let i = 0; i < pathParts.length; i++) {
+            const subPath = "/" + pathParts.slice(0, i + 1).join("/");
+            // Recursively check if this subpath matches the remaining pattern
+            if (matchesNextJsSyntax(subPath, ["/" + remainingPattern])) {
+              isMatch = true;
+              break;
+            }
+          }
+        }
+      }
     }
+    // Handle catch-all routes ([...param])
+    else if (pattern.includes("[...") && pattern.endsWith("]")) {
+      const basePath = pattern.split("[...")[0] ?? "";
+      isMatch = path.startsWith(basePath);
+    }
+    // Handle dynamic segments ([param])
+    else if (pattern.includes("[") && pattern.endsWith("]")) {
+      const parts = pattern.split("/");
+      const pathParts = path.split("/");
+
+      // If the pattern has more parts than the path, it can't match
+      if (parts.length > pathParts.length) {
+        isMatch = false;
+      } else {
+        // Assume it matches until proven otherwise
+        isMatch = true;
+
+        for (let i = 0; i < parts.length; i++) {
+          // Skip dynamic segments as they match anything
+          if (parts[i]?.startsWith("[") && parts[i]?.endsWith("]")) {
+            continue;
+          }
+          // If any static segment doesn't match, the whole pattern doesn't match
+          if (parts[i] !== pathParts[i]) {
+            isMatch = false;
+            break;
+          }
+        }
+      }
+    }
+    // Handle exact matches
+    else {
+      isMatch = path === pattern;
+    }
+
+    // For debugging
+    // console.log(`  Pattern "${pattern}" matches: ${isMatch}`);
+
+    return isMatch;
   });
 }
 
 export async function handleRouting(
   targetPath: string,
   string = false,
-  overwriteDevModeDisabled = false,
+  devModeForceDisable = false,
 ) {
-  const headers = await getHeaders();
-  const dev = overwriteDevModeDisabled ? false : await devModeFlag();
-  const shortname = await getShortname();
-  const isCatchDomain =
-    shortname?.endsWith(".wahl.djl.foundation") ||
-    (headers.host && headers.host.endsWith(".wahl.djl.foundation"));
-  const isRootDomain = headers.host === rootDomain;
+  const headersList = await getHeaders();
+  const host = headersList.host || "";
+  const dev = devModeForceDisable ? false : await devModeFlag();
 
-  if (isRootDomain) {
-    if (
-      matchesNextJsSyntax(targetPath, onlyCatchDomainPages) &&
-      !matchesNextJsSyntax(targetPath, allowBooth)
-    ) {
+  // If in dev mode, always return the target path or redirect to it
+  if (dev) {
+    if (string) return targetPath;
+    redirect(targetPath);
+  }
+
+  const shortname = await getShortname();
+
+  // Determine if we're on a catch domain or custom domain
+  const isCatchDomain = host.endsWith(".wahl.djl.foundation") || !!shortname;
+  const isRootDomain = host === rootDomain || !shortname;
+
+  // For development environment
+  const isDevEnvironment =
+    host.includes("localhost") || host.includes("vercel.app");
+
+  // console.log({
+  // targetPath,
+  // host,
+  // shortname,
+  // isCatchDomain,
+  // isRootDomain,
+  // isDevEnvironment,
+  // });
+
+  // If we're on the root domain
+  if (isRootDomain || (isDevEnvironment && !isCatchDomain)) {
+    // console.log("Checking if path is allowed on root domain");
+    // Check if the target path is not allowed on root domain
+    if (matchesNextJsSyntax(targetPath, rootDisallowedPages)) {
+      // console.log("Path is not allowed on root domain, returning notFound");
+      if (string) return "notFound";
       notFound();
       return;
     }
+
+    // console.log("Path is allowed on root domain, redirecting");
+    // Otherwise, allow navigation
     if (string) return targetPath;
     redirect(targetPath);
-  } else if (isCatchDomain) {
-    if (
-      !matchesNextJsSyntax(targetPath, onlyCatchDomainPages) &&
-      !matchesNextJsSyntax(targetPath, allowBooth)
-    ) {
-      if (dev) {
-        if (string) return targetPath;
-        redirect(targetPath);
-      } else {
-        if (string) return `${rootDomain}${targetPath}`;
-        redirect(`${rootDomain}${targetPath}`);
-      }
-    } else {
+  }
+  // If we're on a catch domain or custom domain
+  else if (isCatchDomain || (!isRootDomain && !isDevEnvironment)) {
+    // console.log("Checking if path is allowed on catch domain");
+    // If the target path is allowed on catch domains, navigate directly
+    if (matchesNextJsSyntax(targetPath, allCatchDomainPages)) {
+      // console.log("Path is allowed on catch domain, redirecting");
       if (string) return targetPath;
       redirect(targetPath);
     }
-  } else {
+    // If the target path is not allowed on catch domains, redirect to root domain
+    else {
+      // console.log(
+      // "Path is not allowed on catch domain, redirecting to root domain",
+      // );
+      const fullUrl = `https://${rootDomain}${targetPath}`;
+      if (string) return fullUrl;
+      redirect(fullUrl);
+    }
+  }
+  // Fallback for any other case
+  else {
+    // console.log("Fallback case, redirecting to target path");
     if (string) return targetPath;
     redirect(targetPath);
   }
 }
 
 export async function cleanup() {
-  const headers = await getHeaders();
+  // Check if cleanup is forced off via cookie
+  const cookieStore = await cookies();
+  const cleanupForceOff =
+    cookieStore.get("x-cleanup-force-off")?.value === "true";
+  if (cleanupForceOff) {
+    return;
+  }
+
+  const headersList = await getHeaders();
+  const host = headersList.host || "";
   const path = await getCurrentPath();
   const dev = await devModeFlag();
-  const shortname = await getShortname();
-  const isCatchDomain =
-    shortname?.endsWith(".wahl.djl.foundation") ||
-    (headers.host && headers.host.endsWith(".wahl.djl.foundation"));
-  const isRootDomain = headers.host === rootDomain;
 
-  if (isRootDomain) {
-    if (
-      matchesNextJsSyntax(path, onlyCatchDomainPages) &&
-      !matchesNextJsSyntax(path, allowBooth)
-    ) {
+  // If in dev mode, always return without doing any cleanup
+  if (dev) {
+    return;
+  }
+
+  const shortname = await getShortname();
+
+  // Determine if we're on a catch domain or custom domain
+  const isCatchDomain = host.endsWith(".wahl.djl.foundation") || !!shortname;
+  const isRootDomain = host === rootDomain;
+
+  // For development environment
+  const isDevEnvironment =
+    host.includes("localhost") || host.includes("vercel.app");
+
+  // console.log({
+  //   path,
+  //   host,
+  //   shortname,
+  //   isCatchDomain,
+  //   isRootDomain,
+  //   isDevEnvironment,
+  // });
+
+  // If we're on the root domain
+  if (isRootDomain || (isDevEnvironment && !isCatchDomain)) {
+    // console.log("Checking if current path is allowed on root domain");
+    // Check if the current path is not allowed on root domain
+    if (matchesNextJsSyntax(path, rootDisallowedPages)) {
+      // console.log(
+      //   "Current path is not allowed on root domain, returning notFound",
+      // );
       notFound();
       return;
     }
-  } else if (isCatchDomain) {
-    if (
-      !matchesNextJsSyntax(path, onlyCatchDomainPages) &&
-      !matchesNextJsSyntax(path, allowBooth)
-    ) {
-      if (!dev) {
-        const url = new URL(`${rootDomain}${path}`);
-        redirect(url.toString());
-      }
+  }
+  // If we're on a catch domain or custom domain
+  else if (isCatchDomain || (!isRootDomain && !isDevEnvironment)) {
+    // console.log("Checking if current path is allowed on catch domain");
+    // If the current path is not allowed on catch domains, redirect to root domain
+    if (!matchesNextJsSyntax(path, allCatchDomainPages)) {
+      // console.log(
+      //   "Current path is not allowed on catch domain, redirecting to root domain",
+      // );
+      const fullUrl = `https://${rootDomain}${path}`;
+      redirect(fullUrl);
     }
   }
+
+  // If we reach here, the user is where they're supposed to be, so do nothing
+  // console.log("User is where they're supposed to be, doing nothing");
+  return;
 }
