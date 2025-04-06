@@ -36,7 +36,7 @@ async function fetchCustomDomain(host: string) {
 export async function getShortname() {
   const overwrite = await shortnameOverwrite();
   const headersList = await getHeaders();
-  const host = headersList.host || "";
+  const host = headersList.host ?? "";
 
   if (overwrite) return overwrite;
 
@@ -72,7 +72,7 @@ export async function getHeaders() {
 
 export async function getCurrentPath() {
   const headersObject = await getHeaders();
-  const url = headersObject["x-url"] || headersObject["x-clerk-clerk-url"];
+  const url = headersObject["x-url"] ?? headersObject["x-clerk-clerk-url"];
   const currentPath = url ? new URL(url).pathname : "/";
   return currentPath;
 }
@@ -209,7 +209,7 @@ export async function handleRouting(
   devModeForceDisable = false,
 ) {
   const headersList = await getHeaders();
-  const host = headersList.host || "";
+  const host = headersList.host ?? "";
   const dev = devModeForceDisable ? false : await devModeFlag();
 
   // If in dev mode, always return the target path or redirect to it
@@ -290,7 +290,7 @@ export async function cleanup() {
   }
 
   const headersList = await getHeaders();
-  const host = headersList.host || "";
+  const host = headersList.host ?? "";
   const path = await getCurrentPath();
   const dev = await devModeFlag();
 
