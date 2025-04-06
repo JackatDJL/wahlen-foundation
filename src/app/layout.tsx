@@ -104,7 +104,6 @@ export default async function RootLayout({
       appearance={{
         baseTheme: dark,
       }}
-      afterSignOutUrl="/api/auth/after/sign-out"
     >
       <html lang="en" className={`${GeistSans.variable}`}>
         <body>
