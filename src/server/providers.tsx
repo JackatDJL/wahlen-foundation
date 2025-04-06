@@ -64,7 +64,7 @@ function PostHogPageView() {
     if (!isSignedIn && posthog._isIdentified()) {
       posthog.reset();
     }
-  }, [posthog, user]);
+  }, [posthog, user, isSignedIn, userId]);
 
   return null;
 }
