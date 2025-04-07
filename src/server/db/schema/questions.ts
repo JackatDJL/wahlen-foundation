@@ -313,7 +313,7 @@ export const questionTrueFalseView = questionSchema
  * It provides a sorted list of questions based on their last updated timestamp.
  */
 export const questionMultipleChoiceView = questionSchema
-  .view("multiple-choice")
+  .view("multiple-choice-view")
   .as((qb) =>
     qb
       .select()

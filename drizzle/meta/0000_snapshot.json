@@ -1,5 +1,5 @@
 {
-  "id": "69582246-07c3-44ca-aa38-6e172ee42142",
+  "id": "e8e26195-eb12-48aa-9d1c-e7a48d051f17",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -113,7 +113,10 @@
             "id"
           ]
         }
-      }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
     },
     "election.sessions": {
       "name": "sessions",
@@ -244,7 +247,10 @@
             "id"
           ]
         }
-      }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
     },
     "election.stimmen": {
       "name": "stimmen",
@@ -408,7 +414,10 @@
             "id"
           ]
         }
-      }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
     },
     "files.files": {
       "name": "files",
@@ -628,7 +637,10 @@
             "id"
           ]
         }
-      }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
     },
     "questions.info": {
       "name": "info",
@@ -720,7 +732,10 @@
             "id"
           ]
         }
-      }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
     },
     "questions.multiple-choice": {
       "name": "multiple-choice",
@@ -814,7 +829,10 @@
             "id"
           ]
         }
-      }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
     },
     "questions.true-false": {
       "name": "true-false",
@@ -1004,7 +1022,10 @@
             "id"
           ]
         }
-      }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
     },
     "questions.questions": {
       "name": "questions",
@@ -1093,7 +1114,10 @@
             "id"
           ]
         }
-      }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
     },
     "wahlen.wahlen": {
       "name": "wahlen",
@@ -1248,7 +1272,10 @@
             "shortname"
           ]
         }
-      }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
     }
   },
   "enums": {
@@ -1338,6 +1365,808 @@
     "wahlen": "wahlen"
   },
   "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {
+    "election.eligible-view": {
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "wahl_id": {
+          "name": "wahl_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "email": {
+          "name": "email",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "eligibility-status-type",
+          "typeSchema": "election",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'draft'"
+        },
+        "uid": {
+          "name": "uid",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "definition": "select \"id\", \"wahl_id\", \"email\", \"status\", \"uid\", \"created_at\", \"updated_at\" from \"election\".\"eligible\" order by \"election\".\"eligible\".\"updated_at\" desc",
+      "name": "eligible-view",
+      "schema": "election",
+      "isExisting": false,
+      "materialized": false
+    },
+    "election.sessions-view": {
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "wahl_id": {
+          "name": "wahl_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "eligible_id": {
+          "name": "eligible_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "publicKey": {
+          "name": "publicKey",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "session-status-type",
+          "typeSchema": "election",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "expires_on": {
+          "name": "expires_on",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "definition": "select \"id\", \"wahl_id\", \"eligible_id\", \"publicKey\", \"status\", \"created_at\", \"updated_at\", \"expires_on\" from \"election\".\"sessions\" order by \"election\".\"sessions\".\"updated_at\" desc",
+      "name": "sessions-view",
+      "schema": "election",
+      "isExisting": false,
+      "materialized": false
+    },
+    "election.stimmen-view": {
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "wahl_id": {
+          "name": "wahl_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "question_id": {
+          "name": "question_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "session_id": {
+          "name": "session_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "answer_id": {
+          "name": "answer_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "signed": {
+          "name": "signed",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "signed_at": {
+          "name": "signed_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "definition": "select \"id\", \"wahl_id\", \"question_id\", \"session_id\", \"answer_id\", \"signed\", \"signed_at\", \"created_at\", \"updated_at\" from \"election\".\"stimmen\" order by \"election\".\"stimmen\".\"updated_at\" desc",
+      "name": "stimmen-view",
+      "schema": "election",
+      "isExisting": false,
+      "materialized": false
+    },
+    "files.files-view": {
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fileType": {
+          "name": "fileType",
+          "type": "file-types",
+          "typeSchema": "files",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "dataType": {
+          "name": "dataType",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "size": {
+          "name": "size",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ufs_key": {
+          "name": "ufs_key",
+          "type": "varchar(48)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "blob_path": {
+          "name": "blob_path",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "url": {
+          "name": "url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "stored_in": {
+          "name": "stored_in",
+          "type": "fileStorage-types",
+          "typeSchema": "files",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'utfs'"
+        },
+        "target_storage": {
+          "name": "target_storage",
+          "type": "fileStorage-types",
+          "typeSchema": "files",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'blob'"
+        },
+        "transfer_status": {
+          "name": "transfer_status",
+          "type": "fileTransfer-types",
+          "typeSchema": "files",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'idle'"
+        },
+        "wahl_id": {
+          "name": "wahl_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "question_id": {
+          "name": "question_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "answer_id": {
+          "name": "answer_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "owner": {
+          "name": "owner",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "definition": "select \"id\", \"name\", \"fileType\", \"dataType\", \"size\", \"ufs_key\", \"blob_path\", \"url\", \"stored_in\", \"target_storage\", \"transfer_status\", \"wahl_id\", \"question_id\", \"answer_id\", \"owner\", \"created_at\", \"updated_at\" from \"files\".\"files\" order by \"files\".\"files\".\"updated_at\" desc",
+      "name": "files-view",
+      "schema": "files",
+      "isExisting": false,
+      "materialized": false
+    },
+    "files.transcending-files-view": {
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fileType": {
+          "name": "fileType",
+          "type": "file-types",
+          "typeSchema": "files",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "dataType": {
+          "name": "dataType",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "size": {
+          "name": "size",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ufs_key": {
+          "name": "ufs_key",
+          "type": "varchar(48)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "blob_path": {
+          "name": "blob_path",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "url": {
+          "name": "url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "stored_in": {
+          "name": "stored_in",
+          "type": "fileStorage-types",
+          "typeSchema": "files",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'utfs'"
+        },
+        "target_storage": {
+          "name": "target_storage",
+          "type": "fileStorage-types",
+          "typeSchema": "files",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'blob'"
+        },
+        "transfer_status": {
+          "name": "transfer_status",
+          "type": "fileTransfer-types",
+          "typeSchema": "files",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'idle'"
+        },
+        "wahl_id": {
+          "name": "wahl_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "question_id": {
+          "name": "question_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "answer_id": {
+          "name": "answer_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "owner": {
+          "name": "owner",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "definition": "select \"id\", \"name\", \"fileType\", \"dataType\", \"size\", \"ufs_key\", \"blob_path\", \"url\", \"stored_in\", \"target_storage\", \"transfer_status\", \"wahl_id\", \"question_id\", \"answer_id\", \"owner\", \"created_at\", \"updated_at\" from \"files\".\"files\" where not \"files\".\"files\".\"transfer_status\" = 'idle' order by \"files\".\"files\".\"updated_at\" desc",
+      "name": "transcending-files-view",
+      "schema": "files",
+      "isExisting": false,
+      "materialized": false
+    },
+    "questions.info-view": {
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "question_id": {
+          "name": "question_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "image": {
+          "name": "image",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "definition": "select \"id\", \"question_id\", \"title\", \"description\", \"image\", \"created_at\", \"updated_at\" from \"questions\".\"info\" order by \"questions\".\"info\".\"updated_at\" desc",
+      "name": "info-view",
+      "schema": "questions",
+      "isExisting": false,
+      "materialized": false
+    },
+    "questions.multiple-choice-view": {
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "question_id": {
+          "name": "question_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "content": {
+          "name": "content",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "definition": "select \"id\", \"question_id\", \"title\", \"description\", \"content\", \"created_at\", \"updated_at\" from \"questions\".\"multiple-choice\" order by \"questions\".\"multiple-choice\".\"updated_at\" desc",
+      "name": "multiple-choice-view",
+      "schema": "questions",
+      "isExisting": false,
+      "materialized": false
+    },
+    "questions.true-false-view": {
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "question_id": {
+          "name": "question_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "o1_id": {
+          "name": "o1_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "o1_title": {
+          "name": "o1_title",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "o1_description": {
+          "name": "o1_description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "o1_correct": {
+          "name": "o1_correct",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "o1_colour": {
+          "name": "o1_colour",
+          "type": "varchar(7)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "o1_image": {
+          "name": "o1_image",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "o2_id": {
+          "name": "o2_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "o2_title": {
+          "name": "o2_title",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "o2_description": {
+          "name": "o2_description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "o2_correct": {
+          "name": "o2_correct",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "o2_colour": {
+          "name": "o2_colour",
+          "type": "varchar(7)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "o2_image": {
+          "name": "o2_image",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "definition": "select \"id\", \"question_id\", \"title\", \"description\", \"o1_id\", \"o1_title\", \"o1_description\", \"o1_correct\", \"o1_colour\", \"o1_image\", \"o2_id\", \"o2_title\", \"o2_description\", \"o2_correct\", \"o2_colour\", \"o2_image\", \"created_at\", \"updated_at\" from \"questions\".\"true-false\" order by \"questions\".\"true-false\".\"updated_at\" desc",
+      "name": "true-false-view",
+      "schema": "questions",
+      "isExisting": false,
+      "materialized": false
+    },
+    "questions.questions-view": {
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "wahl_id": {
+          "name": "wahl_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "types",
+          "typeSchema": "questions",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "question_id": {
+          "name": "question_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "definition": "select \"id\", \"wahl_id\", \"type\", \"question_id\", \"created_at\", \"updated_at\" from \"questions\".\"questions\" order by \"questions\".\"questions\".\"updated_at\" desc",
+      "name": "questions-view",
+      "schema": "questions",
+      "isExisting": false,
+      "materialized": false
+    },
+    "wahlen.wahlen-view": {
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "shortname": {
+          "name": "shortname",
+          "type": "varchar(25)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "status-type",
+          "typeSchema": "wahlen",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'draft'"
+        },
+        "alert": {
+          "name": "alert",
+          "type": "alert-type",
+          "typeSchema": "wahlen",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "alert_message": {
+          "name": "alert_message",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "title": {
+          "name": "title",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "owner": {
+          "name": "owner",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "start_date": {
+          "name": "start_date",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "end_date": {
+          "name": "end_date",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "archive_date": {
+          "name": "archive_date",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "definition": "select \"id\", \"shortname\", \"status\", \"alert\", \"alert_message\", \"title\", \"description\", \"owner\", \"start_date\", \"end_date\", \"archive_date\", \"created_at\", \"updated_at\" from \"wahlen\".\"wahlen\" order by \"wahlen\".\"wahlen\".\"updated_at\" desc",
+      "name": "wahlen-view",
+      "schema": "wahlen",
+      "isExisting": false,
+      "materialized": false
+    }
+  },
   "_meta": {
     "columns": {},
     "schemas": {},
