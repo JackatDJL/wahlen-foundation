@@ -12,17 +12,15 @@ import { randomUUID } from "crypto";
 import { eq } from "drizzle-orm";
 import { type Result, err, ok } from "neverthrow";
 import { tc } from "~/lib/tryCatch";
-
-enum wahlErrorTypes {
-  Failed = "Failed",
-  Disallowed = "Disallowed",
-  NotFound = "NotFound",
-}
-
-type wahlError = {
-  type: wahlErrorTypes;
-  message: string;
-};
+import {
+  apiDetailedErrorType,
+  apiErrorTypes,
+  apiResponseTypes,
+  apiType,
+  blankPlaceholdingCallableProcedure,
+  identifyingInputType,
+  validateEditability,
+} from "./utility";
 
 const draftWahlType = z.object({
   shortname: z.string().min(3).max(25),
@@ -40,32 +38,23 @@ const editWahlType = z.object({
   title: z.string().min(3).max(256).optional(),
   description: z.string().optional(),
 
+  alert: z.enum(["card", "info", "warning", "error"]).optional().nullable(),
+  alertMessage: z.string().min(3).max(256).optional(),
+
   startDate: z.date().optional(),
   endDate: z.date().optional(),
   archiveDate: z.date().optional(),
 });
 
-const alertType = z.object({
-  type: z.enum(["info", "warning", "error"]),
-  message: z.string().min(3).max(256).optional(),
-});
-
-const queueWahlType = z.object({
+const scheduleWahlType = z.object({
   id: z.string().uuid(),
-
-  startDate: z.date(),
+  startDate: z.date().optional(),
   endDate: z.date().optional(),
 });
 
-const reDraftWahlType = z.string().uuid();
-
-const cronWahlType = null;
-
-const completeWahlType = z.string().uuid();
-
-const archiveWahlType = z.string().uuid();
-
-const getByShortnameType = z.string().uuid();
+const getByShortnameType = z.object({
+  shortname: z.string().min(3).max(25),
+});
 
 const generateResultsType = z.string().uuid();
 
@@ -74,288 +63,443 @@ const getResultsType = z.string().uuid();
 export const wahlenRouter = createTRPCRouter({
   draft: protectedProcedure
     .input(draftWahlType)
-    .mutation(
-      async ({
-        input,
-      }): Promise<Result<typeof wahlen.$inferSelect, wahlError>> => {
-        const insertable: typeof wahlen.$inferInsert = {
-          id: randomUUID(),
-          shortname: input.shortname,
+    .mutation(async ({ input }): apiType<typeof wahlen.$inferSelect> => {
+      const insertable: typeof wahlen.$inferInsert = {
+        id: randomUUID(),
+        shortname: input.shortname,
 
-          title: input.title,
-          description: input.description,
+        title: input.title,
+        description: input.description,
 
-          owner: input.owner,
-        };
-        const { data: insertableResponse, error: insertableError } = await tc(
-          db.insert(wahlen).values(insertable).returning(),
-        );
-        if (insertableError) {
-          return err({
-            type: wahlErrorTypes.Failed,
-            message: insertableError.message,
-          });
-        }
+        owner: input.owner,
+      };
+      const { data: insertableResponse, error: insertableError } = await tc(
+        db.insert(wahlen).values(insertable).returning(),
+      );
+      if (insertableError) {
+        return err({
+          type: apiErrorTypes.BadRequest,
+          detailedType: apiDetailedErrorType.BadRequestUnknown,
+          message: "Database rejected insert operation",
+        });
+      }
 
-        const response = insertableResponse[0] ?? null;
-        if (!response) {
-          return err({
-            type: wahlErrorTypes.Failed,
-            message: "Failed to create wahl",
-          });
-        }
+      const response = insertableResponse[0] ?? null;
+      if (!response) {
+        return err({
+          type: apiErrorTypes.BadRequest,
+          detailedType:
+            apiDetailedErrorType.BadRequestSequentialOperationFailure,
+          message: "Database successfully inserted but did not return data",
+        });
+      }
 
-        return ok(response);
-      },
-    ),
+      return ok({
+        type: apiResponseTypes.Success,
+
+        data: response,
+      });
+    }),
   edit: protectedProcedure
     .input(editWahlType)
-    .mutation(
-      async ({
-        input,
-      }): Promise<Result<typeof wahlen.$inferSelect, wahlError>> => {
-        const { data: dataArray, error: dbError } = await tc(
+    .mutation(async ({ input }): apiType<typeof wahlen.$inferSelect> => {
+      const vE = await validateEditability(input.id);
+      if (vE.isErr()) {
+        return err(vE.error);
+      }
+
+      const { data: dataArray, error: dbError } = await tc(
+        db.select().from(wahlen).where(eq(wahlen.id, input.id)),
+      );
+      if (dbError) {
+        return err({
+          type: apiErrorTypes.BadRequest,
+          detailedType: apiDetailedErrorType.BadRequestUnknown,
+          message: "Database query failed",
+        });
+      }
+
+      const data = dataArray[0] ?? null;
+      if (!data) {
+        return err({
+          type: apiErrorTypes.NotFound,
+          message: "Wahl not found",
+        });
+      }
+
+      const { data: insertableResponse, error: insertableError } = await tc(
+        db
+          .update(wahlen)
+          .set({
+            shortname: input.shortname,
+
+            alert: input.alert,
+            alertMessage: input.alertMessage,
+
+            title: input.title,
+            description: input.description,
+
+            startDate: input.startDate,
+            endDate: input.endDate,
+            archiveDate: input.archiveDate,
+
+            createdAt: data.createdAt,
+            updatedAt: new Date(),
+          })
+          .where(eq(wahlen.id, input.id))
+          .returning(),
+      );
+      if (insertableError) {
+        return err({
+          type: apiErrorTypes.BadRequest,
+          detailedType: apiDetailedErrorType.BadRequestUnknown,
+          message: "Database rejected insert operation",
+        });
+      }
+
+      const response = insertableResponse[0] ?? null;
+      if (!response) {
+        return err({
+          type: apiErrorTypes.BadRequest,
+          detailedType:
+            apiDetailedErrorType.BadRequestSequentialOperationFailure,
+          message: "Database successfully inserted but did not return data",
+        });
+      }
+
+      return ok({
+        type: apiResponseTypes.Success,
+
+        data: response,
+      });
+    }),
+
+  publish: protectedProcedure
+    .input(identifyingInputType)
+    .mutation(async ({ input }): apiType<typeof wahlen.$inferSelect> => {
+      const vE = await validateEditability(input.id);
+      if (vE.isErr()) {
+        return err(vE.error);
+      }
+
+      const { data: insertableResponse, error: insertableError } = await tc(
+        db
+          .update(wahlen)
+          .set({
+            isPublished: true,
+            isCompleted: false,
+            hasResults: false,
+            isArchived: false,
+
+            updatedAt: new Date(),
+          })
+          .where(eq(wahlen.id, input.id))
+          .returning(),
+      );
+      if (insertableError) {
+        return err({
+          type: apiErrorTypes.BadRequest,
+          detailedType: apiDetailedErrorType.BadRequestUnknown,
+          message: "Database rejected insert operation",
+        });
+      }
+
+      const response = insertableResponse[0] ?? null;
+      if (!response) {
+        return err({
+          type: apiErrorTypes.NotFound,
+          message: "Wahl not found",
+        });
+      }
+      return ok({
+        type: apiResponseTypes.Success,
+        data: response,
+      });
+    }),
+
+  unPublish: protectedProcedure
+    .input(identifyingInputType)
+    .mutation(async ({ input }): apiType<typeof wahlen.$inferSelect> => {
+      const vE = await validateEditability(input.id);
+      if (vE.isErr()) {
+        return err(vE.error);
+      }
+      const { data: insertableResponse, error: insertableError } = await tc(
+        db
+          .update(wahlen)
+          .set({
+            isActive: false,
+            isPublished: false,
+            isCompleted: false,
+            hasResults: false,
+            isArchived: false,
+            updatedAt: new Date(),
+          })
+          .where(eq(wahlen.id, input.id))
+          .returning(),
+      );
+      if (insertableError) {
+        return err({
+          type: apiErrorTypes.BadRequest,
+          detailedType: apiDetailedErrorType.BadRequestUnknown,
+          message: "Database rejected insert operation",
+        });
+      }
+
+      const response = insertableResponse[0] ?? null;
+      if (!response) {
+        return err({
+          type: apiErrorTypes.NotFound,
+          message: "Wahl not found",
+        });
+      }
+      return ok({
+        type: apiResponseTypes.Success,
+        data: response,
+      });
+    }),
+
+  schedule: protectedProcedure
+    .input(scheduleWahlType)
+    .mutation(async ({ input }): apiType<typeof wahlen.$inferSelect> => {
+      const vE = await validateEditability(input.id);
+      if (vE.isErr()) {
+        return err(vE.error);
+      }
+
+      const { data: insertableResponse, error: insertableError } = await tc(
+        db
+          .update(wahlen)
+          .set({
+            isScheduled: true,
+            startDate: input.startDate,
+            endDate: input.endDate,
+
+            updatedAt: new Date(),
+          })
+          .where(eq(wahlen.id, input.id))
+          .returning(),
+      );
+      if (insertableError) {
+        return err({
+          type: apiErrorTypes.BadRequest,
+          detailedType: apiDetailedErrorType.BadRequestUnknown,
+          message: "Database rejected insert operation",
+        });
+      }
+
+      const response = insertableResponse[0] ?? null;
+      if (!response) {
+        return err({
+          type: apiErrorTypes.NotFound,
+          message: "Wahl not found",
+        });
+      }
+
+      return ok({
+        type: apiResponseTypes.Success,
+        data: response,
+      });
+    }),
+
+  unSchedule: protectedProcedure
+    .input(identifyingInputType)
+    .mutation(async ({ input }): apiType<typeof wahlen.$inferSelect> => {
+      const vE = await validateEditability(input.id);
+      if (vE.isErr()) {
+        return err(vE.error);
+      }
+
+      const { data: insertableResponse, error: insertableError } = await tc(
+        db
+          .update(wahlen)
+          .set({
+            isScheduled: false,
+            startDate: null,
+            endDate: null,
+
+            updatedAt: new Date(),
+          })
+          .where(eq(wahlen.id, input.id))
+          .returning(),
+      );
+      if (insertableError) {
+        return err({
+          type: apiErrorTypes.BadRequest,
+          detailedType: apiDetailedErrorType.BadRequestUnknown,
+          message: "Database rejected insert operation",
+        });
+      }
+
+      const response = insertableResponse[0] ?? null;
+      if (!response) {
+        return err({
+          type: apiErrorTypes.NotFound,
+          message: "Wahl not found",
+        });
+      }
+
+      return ok({
+        type: apiResponseTypes.Success,
+        data: response,
+      });
+    }),
+
+  archive: protectedProcedure
+    .input(identifyingInputType)
+    .mutation(async ({ input }): apiType<typeof wahlen.$inferSelect> => {
+      const vE = await validateEditability(input.id);
+      if (vE.isErr()) {
+        return err(vE.error);
+      }
+
+      const { data: insertableResponse, error: insertableError } = await tc(
+        db
+          .update(wahlen)
+          .set({
+            isArchived: true,
+            archiveDate: new Date(),
+
+            updatedAt: new Date(),
+          })
+          .where(eq(wahlen.id, input.id))
+          .returning(),
+      );
+      if (insertableError) {
+        return err({
+          type: apiErrorTypes.BadRequest,
+          detailedType: apiDetailedErrorType.BadRequestUnknown,
+          message: "Database rejected insert operation",
+        });
+      }
+
+      const response = insertableResponse[0] ?? null;
+      if (!response) {
+        return err({
+          type: apiErrorTypes.NotFound,
+          message: "Wahl not found",
+        });
+      }
+
+      return ok({
+        type: apiResponseTypes.Success,
+        data: response,
+      });
+    }),
+
+  unArchive: protectedProcedure
+    .input(identifyingInputType)
+    .mutation(async ({ input }): apiType<typeof wahlen.$inferSelect> => {
+      const vE = await validateEditability(input.id);
+      if (vE.isErr()) {
+        return err(vE.error);
+      }
+
+      const { data: insertableResponse, error: insertableError } = await tc(
+        db
+          .update(wahlen)
+          .set({
+            isArchived: false,
+            archiveDate: null,
+
+            updatedAt: new Date(),
+          })
+          .where(eq(wahlen.id, input.id))
+          .returning(),
+      );
+      if (insertableError) {
+        return err({
+          type: apiErrorTypes.BadRequest,
+          detailedType: apiDetailedErrorType.BadRequestUnknown,
+          message: "Database rejected insert operation",
+        });
+      }
+
+      const response = insertableResponse[0] ?? null;
+      if (!response) {
+        return err({
+          type: apiErrorTypes.NotFound,
+          message: "Wahl not found",
+        });
+      }
+
+      return ok({
+        type: apiResponseTypes.Success,
+        data: response,
+      });
+    }),
+
+  delete: protectedProcedure.query(() => "!"), // TODO: Implement delete
+
+  get: createTRPCRouter({
+    byId: publicProcedure
+      .input(identifyingInputType)
+      .query(async ({ input }): apiType<typeof wahlen.$inferSelect> => {
+        const { data: resArray, error: dbError } = await tc(
           db.select().from(wahlen).where(eq(wahlen.id, input.id)),
         );
         if (dbError) {
           return err({
-            type: wahlErrorTypes.Failed,
-            message: dbError.message,
+            type: apiErrorTypes.BadRequest,
+            detailedType: apiDetailedErrorType.BadRequestUnknown,
+            message: "Database query failed",
           });
         }
 
-        const data = dataArray[0] ?? null;
-        if (!data) {
+        const res = resArray[0] ?? null;
+        if (!res) {
           return err({
-            type: wahlErrorTypes.NotFound,
+            type: apiErrorTypes.NotFound,
             message: "Wahl not found",
           });
         }
 
-        const insertable: typeof wahlen.$inferInsert = {
-          id: input.id,
-          shortname: input.shortname ?? data.shortname,
-          status: data.status,
+        return ok({
+          type: apiResponseTypes.Success,
 
-          alert: data.alert,
-          alertMessage: data.alertMessage,
+          data: res,
+        });
+      }),
 
-          title: input.title ?? data.title,
-          description: input.description ?? data.description,
-
-          owner: data.owner,
-
-          startDate: data.startDate,
-          endDate: data.endDate,
-          archiveDate: data.archiveDate,
-
-          createdAt: data.createdAt,
-          updatedAt: new Date(),
-        };
-
-        const { data: insertableResponse, error: insertableError } = await tc(
-          db
-            .update(wahlen)
-            .set(insertable)
-            .where(eq(wahlen.id, input.id))
-            .returning(),
-        );
-        if (insertableError) {
-          return err({
-            type: wahlErrorTypes.Failed,
-            message: insertableError.message,
-          });
-        }
-
-        const response = insertableResponse[0] ?? null;
-        if (!response) {
-          return err({
-            type: wahlErrorTypes.Failed,
-            message: "Failed to update wahl",
-          });
-        }
-
-        return ok(response);
-      },
-    ),
-  queue: protectedProcedure
-    .input(queueWahlType)
-    .mutation(
-      async ({
-        input,
-      }): Promise<Result<typeof wahlen.$inferSelect, wahlError>> => {
+    byShortname: publicProcedure
+      .input(getByShortnameType)
+      .query(async ({ input }): apiType<typeof wahlen.$inferSelect> => {
         const { data: resArray, error: dbError } = await tc(
-          db
-            .update(wahlen)
-            .set({
-              status: "queued",
-
-              startDate: input.startDate,
-              endDate: input.endDate,
-
-              updatedAt: new Date(),
-            })
-            .where(eq(wahlen.id, input.id))
-            .returning(),
+          db.select().from(wahlen).where(eq(wahlen.shortname, input.shortname)),
         );
         if (dbError) {
           return err({
-            type: wahlErrorTypes.Failed,
-            message: dbError.message,
+            type: apiErrorTypes.BadRequest,
+            detailedType: apiDetailedErrorType.BadRequestUnknown,
+            message: "Database query failed",
           });
         }
-        const res = resArray[0] ?? null;
-        if (!res) {
-          return err({
-            type: wahlErrorTypes.Failed,
-            message: "Failed to queue wahl",
-          });
-        }
-        return ok(res);
-      },
-    ),
 
-  reDraft: protectedProcedure
-    .input(reDraftWahlType)
-    .mutation(
-      async ({
-        input,
-      }): Promise<Result<typeof wahlen.$inferSelect, wahlError>> => {
-        const { data: resArray, error: dbError } = await tc(
-          db
-            .update(wahlen)
-            .set({
-              status: "draft",
-              updatedAt: new Date(),
-            })
-            .where(eq(wahlen.id, input))
-            .returning(),
-        );
-        if (dbError) {
-          return err({
-            type: wahlErrorTypes.Failed,
-            message: dbError.message,
-          });
-        }
         const res = resArray[0] ?? null;
         if (!res) {
           return err({
-            type: wahlErrorTypes.Failed,
-            message: "Failed to re-draft wahl",
+            type: apiErrorTypes.NotFound,
+            message: "Wahl not found",
           });
         }
-        return ok(res);
-      },
-    ),
+
+        return ok({
+          type: apiResponseTypes.Success,
+
+          data: res,
+        });
+      }),
+
+    previews: createTRPCRouter({
+      all: blankPlaceholdingCallableProcedure, // TODO: This will return the titles and types of all questions for a given election
+    }),
+  }),
+
+  generateResults: blankPlaceholdingCallableProcedure, // TODO: Man ill probably also need a results table
+
+  getResults: blankPlaceholdingCallableProcedure, // Prolly will get them results
 
   cron: createTRPCRouter({
     run: secureCronProcedure.mutation(() => " "),
   }),
-
-  complete: protectedProcedure
-    .input(completeWahlType)
-    .mutation(
-      async ({
-        input,
-      }): Promise<Result<typeof wahlen.$inferSelect, wahlError>> => {
-        const { data: resArray, error: dbError } = await tc(
-          db
-            .update(wahlen)
-            .set({
-              status: "completed",
-              updatedAt: new Date(),
-            })
-            .where(eq(wahlen.id, input))
-            .returning(),
-        );
-        if (dbError) {
-          return err({
-            type: wahlErrorTypes.Failed,
-            message: dbError.message,
-          });
-        }
-        const res = resArray[0] ?? null;
-        if (!res) {
-          return err({
-            type: wahlErrorTypes.Failed,
-            message: "Failed to complete wahl",
-          });
-        }
-        return ok(res);
-      },
-    ),
-
-  archive: protectedProcedure
-    .input(archiveWahlType)
-    .mutation(
-      async ({
-        input,
-      }): Promise<Result<typeof wahlen.$inferSelect, wahlError>> => {
-        const { data: resArray, error: dbError } = await tc(
-          db
-            .update(wahlen)
-            .set({
-              status: "archived",
-              updatedAt: new Date(),
-              archiveDate: new Date(),
-            })
-            .where(eq(wahlen.id, input))
-            .returning(),
-        );
-        if (dbError) {
-          return err({
-            type: wahlErrorTypes.Failed,
-            message: dbError.message,
-          });
-        }
-        const res = resArray[0] ?? null;
-        if (!res) {
-          return err({
-            type: wahlErrorTypes.Failed,
-            message: "Failed to archive wahl",
-          });
-        }
-        return ok(res);
-      },
-    ),
-
-  getByShortname: publicProcedure
-    .input(getByShortnameType)
-    .query(
-      async ({
-        input,
-      }): Promise<Result<typeof wahlen.$inferSelect, wahlError>> => {
-        const { data: resArray, error: dbError } = await tc(
-          db.select().from(wahlen).where(eq(wahlen.shortname, input)),
-        );
-        if (dbError) {
-          return err({
-            type: wahlErrorTypes.Failed,
-            message: dbError.message,
-          });
-        }
-        const res = resArray[0] ?? null;
-        if (!res) {
-          return err({
-            type: wahlErrorTypes.Failed,
-            message: "Wahl not found",
-          });
-        }
-        return ok(res);
-      },
-    ),
-
-  generateResults: protectedProcedure
-    .input(generateResultsType)
-    .mutation(async ({ input }): Promise<Result<string, wahlError>> => {
-      // Placeholder implementation
-      return ok("Results generated successfully");
-    }),
-
-  getResults: publicProcedure
-    .input(getResultsType)
-    .query(async ({ input }): Promise<Result<string, wahlError>> => {
-      // Placeholder implementation
-      return ok("Results retrieved successfully");
-    }),
 });
