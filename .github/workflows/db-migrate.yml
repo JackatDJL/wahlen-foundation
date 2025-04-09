@@ -21,10 +21,15 @@ jobs:
       - name: Install dependencies 📦
         run: npm install
 
+      - name: Link Vercel Project ▲
+        env:
+          VERCEL_ENV_TOKEN: ${{ secrets.VERCEL_ENV_TOKEN }}
+        run: npx vercel link -t $VERCEL_ENV_TOKEN --project=wahlen-foundation --yes
+
       - name: Pull Vercel environment variables ▲
         env:
           VERCEL_ENV_TOKEN: ${{ secrets.VERCEL_ENV_TOKEN }}
-        run: npx vercel env pull .env -t $VERCEL_ENV_TOKEN --environment=production
+        run: npx vercel env pull .env -t $VERCEL_ENV_TOKEN --environment=production --yes
 
       - name: Migrate the Database 🗃️
         run: npm run db:migrate

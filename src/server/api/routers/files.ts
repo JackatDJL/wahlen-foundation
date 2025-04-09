@@ -1,10 +1,11 @@
-import { eq, not, and, or } from "drizzle-orm";
+import { eq, not, and, or, asc } from "drizzle-orm";
 import { z } from "zod";
 
 import {
   createTRPCRouter,
   protectedProcedure,
   publicProcedure,
+  secureCronProcedure,
 } from "~/server/api/trpc";
 
 import { db } from "~/server/db";
@@ -19,8 +20,16 @@ import { utapi } from "~/server/uploadthing";
 import crypto from "crypto";
 import { err, ok, type Result } from "neverthrow";
 import { tc } from "~/lib/tryCatch";
-import { throwIfActive } from "./questions/delete";
+import { handleDatabaseInteraction, validateEditability } from "./utility";
 import { files } from "~/server/db/schema/files";
+import {
+  apiDetailedErrorType,
+  apiErrorTypes,
+  apiResponseDetailedTypes,
+  apiResponseTypes,
+  apiType,
+  uuidType,
+} from "./utility";
 
 const setInternalQuestionFileType = z.object({
   type: z.enum(["info", "true_false", "multiple_choice"]),
@@ -29,30 +38,10 @@ const setInternalQuestionFileType = z.object({
   fileId: z.string().uuid().nullable(),
 });
 
-type setInternalQuestionFileReturnTypes =
+type SetInternalQuestionFileReturnTypes =
   | typeof questionInfo.$inferSelect
   | typeof questionTrueFalse.$inferSelect
   | typeof questionMultipleChoice.$inferSelect;
-
-enum setInternalQuestionFileErrorTypes {
-  NotFound = "NotFound",
-  UpdateFailed = "UpdateFailed",
-  InputTypeError = "InputTypeError",
-}
-
-type setInternalQuestionFileError =
-  | {
-      type: Exclude<
-        setInternalQuestionFileErrorTypes,
-        setInternalQuestionFileErrorTypes.InputTypeError
-      >;
-      message: string;
-    }
-  | {
-      type: setInternalQuestionFileErrorTypes.InputTypeError;
-      message: string;
-      zodError: z.ZodError;
-    };
 
 /**
  * Associates a file with a question or its answer.
@@ -80,9 +69,9 @@ async function setInternalQuestionFile({
   questionId,
   answerId,
   fileId,
-}: z.infer<typeof setInternalQuestionFileType>): Promise<
-  Result<setInternalQuestionFileReturnTypes, setInternalQuestionFileError>
-> {
+}: z.infer<
+  typeof setInternalQuestionFileType
+>): apiType<SetInternalQuestionFileReturnTypes> {
   const { success, error } = setInternalQuestionFileType.safeParse({
     type,
     questionId,
@@ -91,15 +80,17 @@ async function setInternalQuestionFile({
   });
   if (!success) {
     return err({
-      type: setInternalQuestionFileErrorTypes.InputTypeError,
+      type: apiErrorTypes.ValidationError,
+      detailedType: apiDetailedErrorType.ValidationErrorZod,
       message: "Input is not of valid Type",
+
       zodError: error,
     });
   }
 
   switch (type) {
     case "info":
-      const { data: iIResArray, error: iIResError } = await tc(
+      const iIRes = await handleDatabaseInteraction(
         db
           .update(questionInfo)
           .set({
@@ -109,51 +100,34 @@ async function setInternalQuestionFile({
           })
           .where(eq(questionInfo.questionId, questionId))
           .returning(),
+        true,
       );
-      if (iIResError) {
-        console.error(iIResError);
-        return err({
-          type: setInternalQuestionFileErrorTypes.UpdateFailed,
-          message: "Failed to update question",
-        });
+      if (iIRes.isErr()) {
+        return err(iIRes.error);
       }
 
-      const iIRes = iIResArray ? iIResArray[0] : undefined;
+      return ok({
+        type: apiResponseTypes.Success,
 
-      if (!iIRes) {
-        return err({
-          type: setInternalQuestionFileErrorTypes.NotFound,
-          message: "Question not found",
-        });
-      }
-      return ok(iIRes);
+        data: iIRes.value.data!,
+      });
+
     case "true_false":
-      const { data: tFQuestionsArray, error: tFQuestionsError } = await tc(
+      const tFQ = await handleDatabaseInteraction(
         db
           .select()
           .from(questionTrueFalse)
           .where(eq(questionTrueFalse.questionId, questionId)),
+        true,
       );
-      if (tFQuestionsError) {
-        console.error(tFQuestionsError);
-        return err({
-          type: setInternalQuestionFileErrorTypes.UpdateFailed,
-          message: "Failed to update question",
-        });
+      if (tFQ.isErr()) {
+        return err(tFQ.error);
       }
-
-      const tFQuestions = tFQuestionsArray ? tFQuestionsArray[0] : undefined;
-
-      if (!tFQuestions) {
-        return err({
-          type: setInternalQuestionFileErrorTypes.NotFound,
-          message: "Question not found",
-        });
-      }
+      const tFQuestions = tFQ.value.data!;
 
       switch (answerId) {
         case tFQuestions.o1Id:
-          const { data: tFo1ResArray, error: tFo1ResError } = await tc(
+          const tFo1 = await handleDatabaseInteraction(
             db
               .update(questionTrueFalse)
               .set({
@@ -163,26 +137,20 @@ async function setInternalQuestionFile({
               })
               .where(eq(questionTrueFalse.id, tFQuestions.o1Id))
               .returning(),
+            true,
           );
-          if (tFo1ResError) {
-            console.error(tFo1ResError);
-            return err({
-              type: setInternalQuestionFileErrorTypes.UpdateFailed,
-              message: "Failed to update question",
-            });
+          if (tFo1.isErr()) {
+            return err(tFo1.error);
           }
 
-          const tFo1Res = tFo1ResArray ? tFo1ResArray[0] : undefined;
+          return ok({
+            type: apiResponseTypes.Success,
 
-          if (!tFo1Res) {
-            return err({
-              type: setInternalQuestionFileErrorTypes.NotFound,
-              message: "Answer not found",
-            });
-          }
-          return ok(tFo1Res);
+            data: tFo1.value.data!,
+          });
+
         case tFQuestions.o2Id:
-          const { data: tFo2ResArray, error: tFo2ResError } = await tc(
+          const tFo2 = await handleDatabaseInteraction(
             db
               .update(questionTrueFalse)
               .set({
@@ -193,61 +161,46 @@ async function setInternalQuestionFile({
               .where(eq(questionTrueFalse.id, tFQuestions.o2Id))
               .returning(),
           );
-          if (tFo2ResError) {
-            console.error(tFo2ResError);
-            return err({
-              type: setInternalQuestionFileErrorTypes.UpdateFailed,
-              message: "Failed to update question",
-            });
+          if (tFo2.isErr()) {
+            return err(tFo2.error);
           }
 
-          const tFo2Res = tFo2ResArray ? tFo2ResArray[0] : undefined;
+          return ok({
+            type: apiResponseTypes.Success,
 
-          if (!tFo2Res) {
-            return err({
-              type: setInternalQuestionFileErrorTypes.NotFound,
-              message: "Answer not found",
-            });
-          }
-          return ok(tFo2Res);
+            data: tFo2.value.data!,
+          });
+
         default:
           return err({
-            type: setInternalQuestionFileErrorTypes.NotFound,
+            type: apiErrorTypes.NotFound,
+
             message: "Answer not found",
           });
       }
+
     case "multiple_choice":
-      const { data: mCQuestionsArray, error: mCQuestionsError } = await tc(
+      const mCQ = await handleDatabaseInteraction(
         db
           .select()
           .from(questionMultipleChoice)
           .where(eq(questionMultipleChoice.questionId, questionId)),
+        true,
       );
-      if (mCQuestionsError) {
-        console.error(mCQuestionsError);
-        return err({
-          type: setInternalQuestionFileErrorTypes.UpdateFailed,
-          message: "Failed to update question",
-        });
+      if (mCQ.isErr()) {
+        return err(mCQ.error);
       }
+      const mCQuestions = mCQ.value.data!;
 
-      const mCQuestions = mCQuestionsArray ? mCQuestionsArray[0] : undefined;
-      if (!mCQuestions?.content) {
+      const answerIds = mCQuestions.content?.map((a) => a.id);
+      if (!answerIds?.includes(answerId)) {
         return err({
-          type: setInternalQuestionFileErrorTypes.NotFound,
-          message: "Question not found",
-        });
-      }
-
-      const answerIds = mCQuestions.content.map((a) => a.id);
-      if (!answerIds.includes(answerId)) {
-        return err({
-          type: setInternalQuestionFileErrorTypes.NotFound,
+          type: apiErrorTypes.NotFound,
           message: "Answer not found",
         });
       }
 
-      const editedContent = mCQuestions.content.map((a) => {
+      const editedContent = mCQuestions.content?.map((a) => {
         if (a.id === answerId) {
           return {
             ...a,
@@ -256,14 +209,14 @@ async function setInternalQuestionFile({
         }
         return a;
       });
-      if (!editedContent.length) {
+      if (!editedContent?.length) {
         return err({
-          type: setInternalQuestionFileErrorTypes.NotFound,
+          type: apiErrorTypes.NotFound,
           message: "Answer not found",
         });
       }
 
-      const { data: mcResArray, error: mcResError } = await tc(
+      const mcRes = await handleDatabaseInteraction(
         db
           .update(questionMultipleChoice)
           .set({
@@ -273,28 +226,21 @@ async function setInternalQuestionFile({
           })
           .where(eq(questionMultipleChoice.id, mCQuestions.id))
           .returning(),
+        true,
       );
-      if (mcResError) {
-        console.error(mcResError);
-        return err({
-          type: setInternalQuestionFileErrorTypes.UpdateFailed,
-          message: "Failed to update question",
-        });
+      if (mcRes.isErr()) {
+        return err(mcRes.error);
       }
 
-      const mcRes = mcResArray ? mcResArray[0] : undefined;
+      return ok({
+        type: apiResponseTypes.Success,
 
-      if (!mcRes) {
-        return err({
-          type: setInternalQuestionFileErrorTypes.NotFound,
-          message: "Question not found",
-        });
-      }
+        data: mcRes.value.data!,
+      });
 
-      return ok(mcRes);
     default:
       return err({
-        type: setInternalQuestionFileErrorTypes.NotFound,
+        type: apiErrorTypes.NotFound,
         message: "Question not found",
       });
   }
@@ -305,30 +251,10 @@ const deleteInternalQuestionFileType = z.object({
   answerId: z.string().uuid(),
 });
 
-type deleteInternalQuestionFileReturnTypes =
+type DeleteInternalQuestionFileReturnTypes =
   | typeof questionInfo.$inferSelect
   | typeof questionTrueFalse.$inferSelect
   | typeof questionMultipleChoice.$inferSelect;
-
-enum deleteInternalQuestionFileErrorTypes {
-  NotFound = "NotFound",
-  UpdateFailed = "UpdateFailed",
-  InputTypeError = "InputTypeError",
-}
-
-type deleteInternalQuestionFileError =
-  | {
-      type: Exclude<
-        deleteInternalQuestionFileErrorTypes,
-        deleteInternalQuestionFileErrorTypes.InputTypeError
-      >;
-      message: string;
-    }
-  | {
-      type: deleteInternalQuestionFileErrorTypes.InputTypeError;
-      message: string;
-      zodError: z.ZodError;
-    };
 
 /**
  * Removes the file reference from a question record.
@@ -348,43 +274,35 @@ type deleteInternalQuestionFileError =
 async function removeInternalQuestionFile({
   questionId,
   answerId,
-}: z.infer<typeof deleteInternalQuestionFileType>): Promise<
-  Result<deleteInternalQuestionFileReturnTypes, deleteInternalQuestionFileError>
-> {
+}: z.infer<
+  typeof deleteInternalQuestionFileType
+>): apiType<DeleteInternalQuestionFileReturnTypes> {
   const { success, error } = deleteInternalQuestionFileType.safeParse({
     questionId,
     answerId,
   });
   if (!success) {
     return err({
-      type: deleteInternalQuestionFileErrorTypes.InputTypeError,
+      type: apiErrorTypes.ValidationError,
+      detailedType: apiDetailedErrorType.ValidationErrorZod,
       message: "Input is not of valid Type",
+
       zodError: error,
     });
   }
 
-  const { data: dbresponseArray, error: dbresponseError } = await tc(
-    db.select().from(questions).where(eq(questions.id, questionId)),
+  const response = await handleDatabaseInteraction(
+    db.select().from(questions).where(eq(questions.id, questionId)).limit(1),
+    true,
   );
-  if (dbresponseError) {
-    console.error(dbresponseError);
-    return err({
-      type: deleteInternalQuestionFileErrorTypes.UpdateFailed,
-      message: "Failed to update question",
-    });
+  if (response.isErr()) {
+    return err(response.error);
   }
+  const question = response.value.data!;
 
-  const dbresponse = dbresponseArray ? dbresponseArray[0] : undefined;
-  if (!dbresponse) {
-    return err({
-      type: deleteInternalQuestionFileErrorTypes.NotFound,
-      message: "Question not found",
-    });
-  }
-
-  switch (dbresponse.type) {
+  switch (question.type) {
     case "info":
-      const { data: iIResArray, error: iIResError } = await tc(
+      const iIRes = await handleDatabaseInteraction(
         db
           .update(questionInfo)
           .set({
@@ -394,40 +312,35 @@ async function removeInternalQuestionFile({
           })
           .where(eq(questionInfo.questionId, questionId))
           .returning(),
+        true,
       );
-      if (iIResError) {
-        console.error(iIResError);
-        return err({
-          type: deleteInternalQuestionFileErrorTypes.UpdateFailed,
-          message: "Failed to update question",
-        });
+      if (iIRes.isErr()) {
+        return err(iIRes.error);
       }
 
-      const iIRes = iIResArray ? iIResArray[0] : undefined;
-      if (!iIRes) {
-        return err({
-          type: deleteInternalQuestionFileErrorTypes.NotFound,
-          message: "Question not found",
-        });
-      }
+      return ok({
+        type: apiResponseTypes.Success,
 
-      return ok(iIRes);
+        data: iIRes.value.data!,
+      });
+
     case "true_false":
-      const tFQuestions = (
-        await db
+      const tFQ = await handleDatabaseInteraction(
+        db
           .select()
           .from(questionTrueFalse)
-          .where(eq(questionTrueFalse.questionId, questionId))
-      )[0];
-      if (!tFQuestions) {
-        return err({
-          type: deleteInternalQuestionFileErrorTypes.NotFound,
-          message: "Question not found",
-        });
+          .where(eq(questionTrueFalse.questionId, questionId)),
+        true,
+      );
+      if (tFQ.isErr()) {
+        return err(tFQ.error);
       }
+
+      const tFQuestions = tFQ.value.data!;
+
       switch (answerId) {
         case tFQuestions.o1Id:
-          const { data: tFo1ResArray, error: tFo1ResError } = await tc(
+          const tFo1 = await handleDatabaseInteraction(
             db
               .update(questionTrueFalse)
               .set({
@@ -437,26 +350,20 @@ async function removeInternalQuestionFile({
               })
               .where(eq(questionTrueFalse.id, tFQuestions.o1Id))
               .returning(),
+            true,
           );
-          if (tFo1ResError) {
-            console.error(tFo1ResError);
-            return err({
-              type: deleteInternalQuestionFileErrorTypes.UpdateFailed,
-              message: "Failed to update question",
-            });
+          if (tFo1.isErr()) {
+            return err(tFo1.error);
           }
 
-          const tFo1Res = tFo1ResArray ? tFo1ResArray[0] : undefined;
-          if (!tFo1Res) {
-            return err({
-              type: deleteInternalQuestionFileErrorTypes.NotFound,
-              message: "Answer not found",
-            });
-          }
+          return ok({
+            type: apiResponseTypes.Success,
 
-          return ok(tFo1Res);
+            data: tFo1.value.data!,
+          });
+
         case tFQuestions.o2Id:
-          const { data: tFo2ResArray, error: tFo2ResError } = await tc(
+          const tFo2 = await handleDatabaseInteraction(
             db
               .update(questionTrueFalse)
               .set({
@@ -466,57 +373,43 @@ async function removeInternalQuestionFile({
               })
               .where(eq(questionTrueFalse.id, tFQuestions.o2Id))
               .returning(),
+            true,
           );
-          if (tFo2ResError) {
-            console.error(tFo2ResError);
-            return err({
-              type: deleteInternalQuestionFileErrorTypes.UpdateFailed,
-              message: "Failed to update question",
-            });
+          if (tFo2.isErr()) {
+            return err(tFo2.error);
           }
 
-          const tFo2Res = tFo2ResArray ? tFo2ResArray[0] : undefined;
-          if (!tFo2Res) {
-            return err({
-              type: deleteInternalQuestionFileErrorTypes.NotFound,
-              message: "Answer not found",
-            });
-          }
+          return ok({
+            type: apiResponseTypes.Success,
 
-          return ok(tFo2Res);
+            data: tFo2.value.data!,
+          });
+
         default:
           return err({
-            type: deleteInternalQuestionFileErrorTypes.NotFound,
+            type: apiErrorTypes.NotFound,
             message: "Answer not found",
           });
       }
+
     case "multiple_choice":
-      const { data: mCQuestionsArray, error: mCQuestionsError } = await tc(
+      const mCQ = await handleDatabaseInteraction(
         db
           .select()
           .from(questionMultipleChoice)
           .where(eq(questionMultipleChoice.questionId, questionId)),
+        true,
       );
-      if (mCQuestionsError) {
-        console.error(mCQuestionsError);
-        return err({
-          type: deleteInternalQuestionFileErrorTypes.UpdateFailed,
-          message: "Failed to update question",
-        });
+      if (mCQ.isErr()) {
+        return err(mCQ.error);
       }
 
-      const mCQuestions = mCQuestionsArray ? mCQuestionsArray[0] : undefined;
-      if (!mCQuestions?.content) {
-        return err({
-          type: deleteInternalQuestionFileErrorTypes.NotFound,
-          message: "Question not found",
-        });
-      }
+      const mCQuestions = mCQ.value.data!;
 
       const answerIds = mCQuestions.content?.map((a) => a.id);
       if (!answerIds?.includes(answerId)) {
         return err({
-          type: deleteInternalQuestionFileErrorTypes.NotFound,
+          type: apiErrorTypes.NotFound,
           message: "Answer not found",
         });
       }
@@ -531,12 +424,12 @@ async function removeInternalQuestionFile({
       });
       if (!editedContent?.length) {
         return err({
-          type: deleteInternalQuestionFileErrorTypes.NotFound,
+          type: apiErrorTypes.NotFound,
           message: "Answer not found",
         });
       }
 
-      const { data: mcResArray, error: mcResError } = await tc(
+      const mcRes = await handleDatabaseInteraction(
         db
           .update(questionMultipleChoice)
           .set({
@@ -546,52 +439,25 @@ async function removeInternalQuestionFile({
           })
           .where(eq(questionMultipleChoice.id, mCQuestions.id))
           .returning(),
+        true,
       );
-      if (mcResError) {
-        console.error(mcResError);
-        return err({
-          type: deleteInternalQuestionFileErrorTypes.UpdateFailed,
-          message: "Failed to update question",
-        });
+      if (mcRes.isErr()) {
+        return err(mcRes.error);
       }
 
-      const mcRes = mcResArray ? mcResArray[0] : undefined;
-      if (!mcRes) {
-        return err({
-          type: deleteInternalQuestionFileErrorTypes.NotFound,
-          message: "Question not found",
-        });
-      }
+      return ok({
+        type: apiResponseTypes.Success,
 
-      return ok(mcRes);
+        data: mcRes.value.data!,
+      });
+
     default:
       return err({
-        type: deleteInternalQuestionFileErrorTypes.NotFound,
+        type: apiErrorTypes.NotFound,
         message: "Question not found",
       });
   }
 }
-
-const uuidType = z.string().uuid();
-
-enum deleteByIdErrorTypes {
-  notFound = "NotFound",
-  trancending = "TrancendingServers",
-  noProviderIdentifier = "NoProviderIdentifier",
-  DeleteFailed = "DeleteFailed",
-  InputTypeError = "InputTypeError",
-}
-
-type deleteByIdError =
-  | {
-      type: Exclude<deleteByIdErrorTypes, deleteByIdErrorTypes.InputTypeError>;
-      message: string;
-    }
-  | {
-      type: deleteByIdErrorTypes.InputTypeError;
-      message: string;
-      zodError: z.ZodError;
-    };
 
 /**
  * Deletes a file identified by its UUID, removing both its storage record and associated question reference.
@@ -610,47 +476,61 @@ type deleteByIdError =
  */
 export async function deleteById(
   input: z.infer<typeof uuidType>,
-): Promise<Result<void, deleteByIdError>> {
+): apiType<void> {
   const { success, error } = uuidType.safeParse(input);
   if (!success) {
     return err({
-      type: deleteByIdErrorTypes.InputTypeError,
-      message: "Input is not a valid UUID",
+      type: apiErrorTypes.ValidationError,
+      detailedType: apiDetailedErrorType.ValidationErrorZod,
+      message: "Input is not of valid Type",
       zodError: error,
     });
   }
 
-  const { data: fileArray, error: dbGetError } = await tc(
+  const f = await handleDatabaseInteraction(
     db
       .select()
       .from(files)
       .where(or(eq(files.answerId, input), eq(files.id, input)))
       .limit(1),
+    true,
   );
-  if (dbGetError) {
-    console.error(dbGetError);
-    return err({
-      type: deleteByIdErrorTypes.DeleteFailed,
-      message: "Failed to Query file",
-    });
+  if (f.isErr()) {
+    return err(f.error);
   }
 
-  let file = fileArray ? fileArray[0] : undefined;
-  if (!file) {
-    return err({
-      type: deleteByIdErrorTypes.notFound,
-      message: "File not found",
-    });
-  }
+  let file = f.value.data!;
 
   if (file.transferStatus === "in progress") {
     return err({
-      type: deleteByIdErrorTypes.trancending,
-      message: "File is currently being transcending Servers",
+      type: apiErrorTypes.Conflict,
+      detailedType: apiDetailedErrorType.ConflictDataTranscending,
+      message: "File is currently being transferred",
     });
   }
   if (file.transferStatus === "queued") {
-    const { data: newFileArray, error: dbUpdateError } = await tc(
+    // const { data: newFileArray, error: dbUpdateError } = await tc(
+    //   db
+    //     .update(files)
+    //     .set({
+    //       targetStorage: file.storedIn,
+    //       transferStatus: "idle",
+    //     })
+    //     .where(eq(files.id, input))
+    //     .returning(),
+    // );
+    // if (dbUpdateError) {
+    //   console.error(dbUpdateError);
+    //   return err({
+    //     type: apiErrorTypes.BadRequest,
+    //     detailedType: apiDetailedErrorType.BadRequestInternalServerError,
+    //     message: "Failed to update file",
+    //   });
+    // }
+
+    // const updatedFile = newFileArray ? newFileArray[0] : undefined;
+
+    const updatedFile = await handleDatabaseInteraction(
       db
         .update(files)
         .set({
@@ -659,35 +539,34 @@ export async function deleteById(
         })
         .where(eq(files.id, input))
         .returning(),
+      true,
     );
-    if (dbUpdateError) {
-      console.error(dbUpdateError);
-      return err({
-        type: deleteByIdErrorTypes.DeleteFailed,
-        message: "Failed to Update file",
-      });
+    if (updatedFile.isErr()) {
+      return err(updatedFile.error);
     }
-    file = newFileArray ? newFileArray[0] : undefined;
-    if (!file) {
+
+    if (!updatedFile.value) {
       return err({
-        type: deleteByIdErrorTypes.notFound,
+        type: apiErrorTypes.NotFound,
         message: "File not found",
       });
     }
+    file = updatedFile.value.data!;
   }
 
   switch (file.storedIn) {
     case "utfs":
       if (!file.ufsKey) {
         return err({
-          type: deleteByIdErrorTypes.noProviderIdentifier,
-          message: "No UfsKey Provided",
+          type: apiErrorTypes.Incomplete,
+          detailedType: apiDetailedErrorType.IncompleteProviderIdentification,
+          message: "No UFS Key Provided",
         });
       }
       const deletionResponse = await utapi.deleteFiles(file.ufsKey);
       if (!deletionResponse.success || deletionResponse.deletedCount !== 1) {
         return err({
-          type: deleteByIdErrorTypes.DeleteFailed,
+          type: apiErrorTypes.Failed,
           message: "Failed to delete file",
         });
       }
@@ -695,7 +574,8 @@ export async function deleteById(
     case "blob":
       if (!file.blobPath) {
         return err({
-          type: deleteByIdErrorTypes.noProviderIdentifier,
+          type: apiErrorTypes.Incomplete,
+          detailedType: apiDetailedErrorType.IncompleteProviderIdentification,
           message: "No Blob Path Provided",
         });
       }
@@ -704,7 +584,7 @@ export async function deleteById(
       if (blobDeleteError) {
         console.error(blobDeleteError);
         return err({
-          type: deleteByIdErrorTypes.DeleteFailed,
+          type: apiErrorTypes.Failed,
           message: "Failed to delete file",
         });
       }
@@ -713,60 +593,26 @@ export async function deleteById(
 
   // Update the presentation to remove the file
 
-  const rmIQFResponse = await removeInternalQuestionFile({
+  const rIQF = await removeInternalQuestionFile({
     questionId: file.questionId,
     answerId: file.answerId,
   });
-  if (rmIQFResponse.isErr()) {
-    if (
-      rmIQFResponse.error.type ===
-      deleteInternalQuestionFileErrorTypes.InputTypeError
-    ) {
-      return err({
-        type: deleteByIdErrorTypes.InputTypeError,
-        message: "Input is not of valid Type",
-        zodError: rmIQFResponse.error.zodError,
-      });
-    } else if (
-      rmIQFResponse.error.type ===
-      deleteInternalQuestionFileErrorTypes.UpdateFailed
-    ) {
-      return err({
-        type: deleteByIdErrorTypes.DeleteFailed,
-        message: "Failed to update question",
-      });
-    } else if (
-      rmIQFResponse.error.type === deleteInternalQuestionFileErrorTypes.NotFound
-    ) {
-      return err({
-        type: deleteByIdErrorTypes.notFound,
-        message: "Question not found",
-      });
-    }
+  if (rIQF.isErr()) {
+    return err(rIQF.error);
   }
 
-  const { data: dbFileResponseArray, error: dbFileError } = await tc(
+  const dbFileResponse = await handleDatabaseInteraction(
     db.delete(files).where(eq(files.id, input)).returning(),
+    true,
   );
-  if (dbFileError) {
-    console.error(dbFileError);
-    return err({
-      type: deleteByIdErrorTypes.DeleteFailed,
-      message: "Failed to delete file",
-    });
+  if (dbFileResponse.isErr()) {
+    return err(dbFileResponse.error);
   }
 
-  const dbFileResponse = dbFileResponseArray
-    ? dbFileResponseArray[0]
-    : undefined;
-  if (!dbFileResponse) {
-    return err({
-      type: deleteByIdErrorTypes.notFound,
-      message: "File not found",
-    });
-  }
-
-  return ok();
+  return ok({
+    type: apiResponseTypes.Success,
+    detailedType: apiResponseDetailedTypes.SuccessNoData,
+  });
 }
 
 const createFileType = z.object({
@@ -782,534 +628,476 @@ const createFileType = z.object({
   owner: z.string().length(32),
 });
 
-export type createFileReturnTypes = {
+export type CreateFileReturnTypes = {
   file: typeof files.$inferSelect;
-  question: setInternalQuestionFileReturnTypes;
+  question: SetInternalQuestionFileReturnTypes;
 };
 
-export enum createFileErrorTypes {
-  NotFound = "NotFound",
-  UpdateFailed = "UpdateFailed",
-  Disallowed = "Disallowed",
-}
-
-export type createFileError = {
-  type: createFileErrorTypes;
-  message: string;
-};
-
-type getFileReturnTypes = typeof files.$inferSelect;
-
-enum getFileErrorTypes {
-  NotFound = "NotFound",
-  RequestFailed = "RequestFailed",
-}
-
-type getFileError = {
-  type: getFileErrorTypes;
-  message: string;
-};
-
-enum runFileTransfersErrorTypes {
-  NotFound = "NotFound",
-  RequestFailed = "RequestFailed",
-  TransferFailed = "TransferFailed",
-  BlobCorrupted = "BlobCorrupted",
-  NoProviderIdentifier = "NoProviderIdentifier",
-  UploadFailed = "UploadFailed",
-  DeleteFailed = "DeleteFailed",
-}
-
-type runFileTransfersError = {
-  type: runFileTransfersErrorTypes;
-  message: string;
-};
+type GetFileReturnTypes = typeof files.$inferSelect;
 
 export const fileRouter = createTRPCRouter({
   create: publicProcedure // only called by server!
     .input(createFileType)
-    .query(
-      async ({
-        input,
-      }): Promise<Result<createFileReturnTypes, createFileError>> => {
-        const tIA = await throwIfActive(input.questionId);
-        if (tIA.isErr()) {
-          return err({
-            type: createFileErrorTypes.Disallowed,
-            message: "Question is currently active",
-          });
-        }
-        const { data: wahlArray, error: wahlError } = await tc(
-          db.select().from(questions).where(eq(questions.id, input.questionId)),
-        );
-        if (wahlError) {
-          console.error(wahlError);
-          return err({
-            type: createFileErrorTypes.UpdateFailed,
-            message: "Failed to update question",
-          });
-        }
+    .query(async ({ input }): apiType<CreateFileReturnTypes> => {
+      const vE = await validateEditability(input.questionId);
+      if (vE.isErr()) {
+        return err(vE.error);
+      }
 
-        const wahl = wahlArray ? wahlArray[0] : undefined;
-        if (!wahl) {
-          return err({
-            type: createFileErrorTypes.NotFound,
-            message: "Question not found",
-          });
-        }
+      const wahl = await handleDatabaseInteraction(
+        db
+          .select()
+          .from(questions)
+          .where(eq(questions.id, input.questionId))
+          .limit(1),
+        true,
+      );
+      if (wahl.isErr()) {
+        return err(wahl.error);
+      }
 
-        const { data: questionArray, error: questionError } = await tc(
-          db.select().from(questions).where(eq(questions.id, input.questionId)),
-        );
-        if (questionError) {
-          console.error(questionError);
-          return err({
-            type: createFileErrorTypes.UpdateFailed,
-            message: "Failed to update question",
-          });
-        }
+      const question = await handleDatabaseInteraction(
+        db
+          .select()
+          .from(questions)
+          .where(eq(questions.id, input.questionId))
+          .limit(1),
+        true,
+      );
+      if (question.isErr()) {
+        return err(question.error);
+      }
 
-        const question = questionArray ? questionArray[0] : undefined;
-        if (!question) {
-          return err({
-            type: createFileErrorTypes.NotFound,
-            message: "Question not found",
-          });
-        }
+      const file: typeof files.$inferInsert = {
+        id: crypto.randomUUID(),
+        name: input.name,
+        fileType: input.fileType,
+        dataType: input.dataType,
+        size: input.size,
 
-        const file: typeof files.$inferInsert = {
-          id: crypto.randomUUID(),
-          name: input.name,
-          fileType: input.fileType,
-          dataType: input.dataType,
-          size: input.size,
+        ufsKey: input.ufsKey,
+        url: input.url,
 
-          ufsKey: input.ufsKey,
-          url: input.url,
+        storedIn: "utfs",
+        targetStorage: "utfs",
+        transferStatus: "queued",
 
-          storedIn: "utfs",
-          targetStorage: "utfs",
-          transferStatus: "queued",
+        wahlId: wahl.value.data!.id,
+        questionId: input.questionId,
+        answerId: input.answerId,
+        owner: input.owner,
 
-          wahlId: wahl.id,
-          questionId: input.questionId,
-          answerId: input.answerId,
-          owner: input.owner,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
 
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
+      const response = await handleDatabaseInteraction(
+        db.insert(files).values(file).returning(),
+        true,
+      );
+      if (response.isErr()) {
+        return err(response.error);
+      }
 
-        const { data: responseArray, error: dbError } = await tc(
-          db.insert(files).values(file).returning(),
-        );
-        if (dbError) {
-          console.error(dbError);
-          return err({
-            type: createFileErrorTypes.UpdateFailed,
-            message: "Failed to update question",
-          });
-        }
+      const questionMutation = await setInternalQuestionFile({
+        type: question.value.data!.type,
+        questionId: input.questionId,
+        answerId: input.answerId,
+        fileId: response.value.data!.id,
+      });
+      if (questionMutation.isErr()) {
+        return err(questionMutation.error);
+      }
 
-        const response = responseArray ? responseArray[0] : undefined;
-        if (!response) {
-          return err({
-            type: createFileErrorTypes.UpdateFailed,
-            message: "Failed to update question",
-          });
-        }
+      return ok({
+        type: apiResponseTypes.Success,
 
-        const questionMutation = await setInternalQuestionFile({
-          type: question.type,
-          questionId: input.questionId,
-          answerId: input.answerId,
-          fileId: response.id,
-        });
-        if (questionMutation.isErr()) {
-          if (
-            questionMutation.error.type ===
-            setInternalQuestionFileErrorTypes.InputTypeError
-          ) {
-            return err({
-              type: createFileErrorTypes.UpdateFailed,
-              message: "Failed to update question",
-            });
-          } else {
-            return err({
-              type: createFileErrorTypes.UpdateFailed,
-              message: "Failed to update question",
-            });
-          }
-        }
+        data: {
+          file: response.value.data!,
+          question: questionMutation.value.data!,
+        },
+      });
+    }),
 
-        return ok({
-          file: response,
-          question: questionMutation.value,
-        });
-      },
-    ),
   get: publicProcedure
     .input(uuidType)
-    .query(
-      async ({ input }): Promise<Result<getFileReturnTypes, getFileError>> => {
-        const { data: fileArray, error: dbGetError } = await tc(
-          db
-            .select()
-            .from(files)
-            .where(or(eq(files.answerId, input), eq(files.id, input)))
-            .limit(1),
-        );
-        if (dbGetError) {
-          console.error(dbGetError);
-          return err({
-            type: getFileErrorTypes.RequestFailed,
-            message: "Failed to Query file",
-          });
-        }
+    .query(async ({ input }): apiType<GetFileReturnTypes> => {
+      const response = await handleDatabaseInteraction(
+        db
+          .select()
+          .from(files)
+          .where(or(eq(files.answerId, input), eq(files.id, input)))
+          .limit(1),
+        true,
+      );
+      if (response.isErr()) {
+        return err(response.error);
+      }
 
-        const file = fileArray ? fileArray[0] : undefined;
-        if (!file) {
-          return err({
-            type: getFileErrorTypes.NotFound,
-            message: "File not found",
-          });
-        }
+      return ok({
+        type: apiResponseTypes.Success,
 
-        return ok(file);
-      },
-    ),
+        data: response.value.data!,
+      });
+    }),
 
   deleteById: protectedProcedure.input(uuidType).mutation(async ({ input }) => {
     return deleteById(input);
   }),
 
   transfers: createTRPCRouter({
-    run: publicProcedure.mutation(
-      async (): Promise<Result<void, runFileTransfersError>> => {
-        // SERVER
-        // First set all the files wo are idle and storedIn !== targetStorage to queued
-        // This will probably only be called if i manually move around files between storage services
+    run: secureCronProcedure.mutation(async (): apiType<void> => {
+      // SERVER
+      // First set all the files wo are idle and storedIn !== targetStorage to queued
+      // This will probably only be called if i manually move around files between storage services
 
-        const { error: dbInitiateStatusError } = await tc(
+      const dbInitiate = await handleDatabaseInteraction(
+        db
+          .update(files)
+          .set({
+            transferStatus: "queued",
+
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(files.transferStatus, "idle"),
+              not(eq(files.storedIn, files.targetStorage)),
+            ),
+          )
+          .returning(),
+      );
+      if (dbInitiate.isErr()) {
+        return err(dbInitiate.error);
+      }
+
+      const dbResetSameStorage = await handleDatabaseInteraction(
+        db
+          .update(files)
+          .set({
+            transferStatus: "idle",
+
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              not(eq(files.transferStatus, "idle")),
+              eq(files.storedIn, files.targetStorage),
+            ),
+          )
+          .returning(),
+      );
+
+      // const { data: filesToTransfer, error: filesToTransferError } = await tc(
+      //   db.select().from(files).where(eq(files.transferStatus, "queued")),
+      // );
+      // if (filesToTransferError) {
+      //   console.error(filesToTransferError);
+      //   return err({
+      //     type: RunFileTransfersErrorTypes.RequestFailed,
+      //     message: "Failed to retrieve files to transfer",
+      //   });
+      // }
+      const fTT = await handleDatabaseInteraction(
+        db.select().from(files).where(eq(files.transferStatus, "queued")),
+        false,
+      );
+      if (fTT.isErr()) {
+        return err(fTT.error);
+      }
+
+      const filesToTransfer = fTT.value.data!;
+
+      for (const file of filesToTransfer) {
+        // Set Status
+        // const { error: SetStatusError } = await tc(
+        //   db
+        //     .update(files)
+        //     .set({
+        //       transferStatus: "in progress",
+
+        //       updatedAt: new Date(),
+        //     })
+        //     .where(eq(files.id, file.id)),
+        // );
+        // if (SetStatusError) {
+        //   console.error(SetStatusError);
+        //   return err({
+        //     type: RunFileTransfersErrorTypes.TransferFailed,
+        //     message: "Failed to update file status",
+        //   });
+        // }
+        const SS = await handleDatabaseInteraction(
           db
             .update(files)
             .set({
-              transferStatus: "queued",
+              transferStatus: "in progress",
 
               updatedAt: new Date(),
             })
-            .where(
-              and(
-                eq(files.transferStatus, "idle"),
-                not(eq(files.storedIn, files.targetStorage)),
-              ),
-            ),
+            .where(eq(files.id, file.id))
+            .returning(),
+          true,
         );
-        if (dbInitiateStatusError) {
-          console.error(dbInitiateStatusError);
+        if (SS.isErr()) {
+          return err(SS.error);
+        }
+
+        const { data: blob, error: FetchError } = await tc(
+          fetch(file.url).then((res) => res.blob()),
+        );
+        if (FetchError) {
+          console.error(FetchError);
           return err({
-            type: runFileTransfersErrorTypes.RequestFailed,
-            message: "Failed to update file status",
+            type: apiErrorTypes.BadRequest,
+            detailedType:
+              apiDetailedErrorType.BadRequestSequentialOperationFailure,
+            message: "Failed to fetch file",
           });
         }
 
-        const { error: dbResetSameStorageError } = await tc(
-          db
-            .update(files)
-            .set({
-              transferStatus: "idle",
-
-              updatedAt: new Date(),
-            })
-            .where(
-              and(
-                not(eq(files.transferStatus, "idle")),
-                eq(files.storedIn, files.targetStorage),
-              ),
-            ),
-        );
-        if (dbResetSameStorageError) {
-          console.error(dbResetSameStorageError);
-          return err({
-            type: runFileTransfersErrorTypes.RequestFailed,
-            message: "Failed to update file status",
-          });
-        }
-
-        const { data: filesToTransfer, error: filesToTransferError } = await tc(
-          db.select().from(files).where(eq(files.transferStatus, "queued")),
-        );
-        if (filesToTransferError) {
-          console.error(filesToTransferError);
-          return err({
-            type: runFileTransfersErrorTypes.RequestFailed,
-            message: "Failed to retrieve files to transfer",
-          });
-        }
-
-        for (const file of filesToTransfer) {
-          // Set Status
-          const { error: SetStatusError } = await tc(
+        if (blob.size !== file.size) {
+          console.error(
+            "Blob is Corrupted (Or Cloudflare making issues again), Aborting transfer",
+          );
+          const abort = await handleDatabaseInteraction(
             db
               .update(files)
               .set({
-                transferStatus: "in progress",
+                transferStatus: "idle",
 
                 updatedAt: new Date(),
               })
-              .where(eq(files.id, file.id)),
+              .where(eq(files.id, file.id))
+              .returning(),
+            true,
           );
-          if (SetStatusError) {
-            console.error(SetStatusError);
-            return err({
-              type: runFileTransfersErrorTypes.TransferFailed,
-              message: "Failed to update file status",
-            });
+          if (abort.isErr()) {
+            return err(abort.error);
           }
 
-          const { data: blob, error: FetchError } = await tc(
-            fetch(file.url).then((res) => res.blob()),
-          );
-          if (FetchError) {
-            console.error(FetchError);
-            return err({
-              type: runFileTransfersErrorTypes.TransferFailed,
-              message: "Failed to fetch file blob",
-            });
-          }
+          return err({
+            type: apiErrorTypes.BadRequest,
+            detailedType: apiDetailedErrorType.BadRequestCorrupted,
+            message: "Blob is corrupted",
+          });
+        }
 
-          if (blob.size !== file.size) {
-            console.error(
-              "Blob is Corrupted (Or Cloudflare making issues again), Aborting transfer",
+        switch (file.targetStorage) {
+          case "utfs":
+            const { data: up_utfs_response, error: up_utfs_error } = await tc(
+              utapi.uploadFilesFromUrl(file.url),
             );
-            const { error: AbortError } = await tc(
+            if (up_utfs_error) {
+              console.error(up_utfs_error);
+              return err({
+                type: apiErrorTypes.Failed,
+                detailedType: apiDetailedErrorType.Failed,
+                message: "Failed to upload file",
+              });
+            }
+            if (!up_utfs_response.data?.key) {
+              console.error("No Key Provided");
+              return err({
+                type: apiErrorTypes.Incomplete,
+                detailedType:
+                  apiDetailedErrorType.IncompleteProviderIdentification,
+                message: "No Key Provided",
+              });
+            }
+            if (!up_utfs_response.data?.ufsUrl) {
+              console.error("No URL Provided");
+              return err({
+                type: apiErrorTypes.Incomplete,
+                detailedType:
+                  apiDetailedErrorType.IncompleteProviderIdentification,
+                message: "No URL Provided",
+              });
+            }
+
+            const dbUpdateFileLocation = await handleDatabaseInteraction(
               db
                 .update(files)
                 .set({
-                  transferStatus: "idle",
+                  ufsKey: up_utfs_response.data.key,
+                  url: up_utfs_response.data.ufsUrl,
+
+                  updatedAt: new Date(),
+                })
+                .where(eq(files.id, file.id))
+                .returning(),
+              true,
+            );
+            if (dbUpdateFileLocation.isErr()) {
+              return err(dbUpdateFileLocation.error);
+            }
+            break;
+
+          case "blob":
+            const { data: up_blob_response, error: up_blob_error } = await tc(
+              put(
+                `wahlen/${process.env.NODE_ENV}/${file.owner}/${file.name}`,
+                blob,
+                {
+                  access: "public",
+                },
+              ),
+            );
+            if (up_blob_error) {
+              console.error(up_blob_error);
+              return err({
+                type: apiErrorTypes.Failed,
+                detailedType: apiDetailedErrorType.Failed,
+                message: "Failed to upload file",
+              });
+            }
+            if (!up_blob_response.pathname) {
+              console.error("No Path Provided");
+              return err({
+                type: apiErrorTypes.BadRequest,
+                detailedType: apiDetailedErrorType.BadRequestCorrupted,
+                message: "No Path Provided",
+              });
+            }
+            if (!up_blob_response.url) {
+              console.error("No URL Provided");
+              return err({
+                type: apiErrorTypes.BadRequest,
+                detailedType: apiDetailedErrorType.BadRequestCorrupted,
+                message: "No URL Provided",
+              });
+            }
+
+            const dbUpdateBlobLocation = await handleDatabaseInteraction(
+              db
+                .update(files)
+                .set({
+                  blobPath: up_blob_response.pathname,
+                  url: up_blob_response.url,
+
+                  updatedAt: new Date(),
+                })
+                .where(eq(files.id, file.id))
+                .returning(),
+              true,
+            );
+            if (dbUpdateBlobLocation.isErr()) {
+              return err(dbUpdateBlobLocation.error);
+            }
+            break;
+        }
+
+        switch (file.storedIn) {
+          case "utfs":
+            if (!file.ufsKey) {
+              return err({
+                type: apiErrorTypes.Incomplete,
+                detailedType:
+                  apiDetailedErrorType.IncompleteProviderIdentification,
+                message: "No UFS Key Provided",
+              });
+            }
+
+            const { data: del_utfs_response, error: del_utfs_error } = await tc(
+              utapi.deleteFiles(file.ufsKey),
+            );
+            if (del_utfs_error) {
+              console.error(del_utfs_error);
+              return err({
+                type: apiErrorTypes.Failed,
+                detailedType: apiDetailedErrorType.Failed,
+                message: "Failed to delete file",
+              });
+            }
+            if (
+              !del_utfs_response.success ||
+              del_utfs_response.deletedCount !== 1
+            ) {
+              console.error("Failed to delete file");
+              return err({
+                type: apiErrorTypes.Failed,
+                detailedType: apiDetailedErrorType.Failed,
+                message: "Failed to delete file",
+              });
+            }
+
+            const { error: dbDelUtfsError } = await tc(
+              db
+                .update(files)
+                .set({
+                  ufsKey: null,
 
                   updatedAt: new Date(),
                 })
                 .where(eq(files.id, file.id)),
             );
-            if (AbortError) {
-              console.error(AbortError);
+            if (dbDelUtfsError) {
+              console.error(dbDelUtfsError);
               return err({
-                type: runFileTransfersErrorTypes.TransferFailed,
-                message: "Failed to update file status",
+                type: apiErrorTypes.Failed,
+                detailedType: apiDetailedErrorType.Failed,
+                message: "Failed to delete file",
               });
             }
-            return err({
-              type: runFileTransfersErrorTypes.BlobCorrupted,
-              message: "Blob is corrupted",
-            });
-          }
+            break;
+          case "blob":
+            if (!file.blobPath) {
+              return err({
+                type: apiErrorTypes.BadRequest,
+                detailedType: apiDetailedErrorType.BadRequestCorrupted,
+                message: "No Path Provided",
+              });
+            }
 
-          switch (file.targetStorage) {
-            case "utfs":
-              const { data: up_utfs_response, error: up_utfs_error } = await tc(
-                utapi.uploadFilesFromUrl(file.url),
-              );
-              if (up_utfs_error) {
-                console.error(up_utfs_error);
-                return err({
-                  type: runFileTransfersErrorTypes.UploadFailed,
-                  message: "Failed to upload file",
-                });
-              }
-              if (!up_utfs_response.data?.key) {
-                console.error("No Key Provided");
-                return err({
-                  type: runFileTransfersErrorTypes.NoProviderIdentifier,
-                  message: "No Key Provided",
-                });
-              }
-              if (!up_utfs_response.data?.ufsUrl) {
-                console.error("No URL Provided");
-                return err({
-                  type: runFileTransfersErrorTypes.NoProviderIdentifier,
-                  message: "No URL Provided",
-                });
-              }
+            const { error: del_blob_error } = await tc(del(file.blobPath));
+            if (del_blob_error) {
+              console.error(del_blob_error);
+              return err({
+                type: apiErrorTypes.Failed,
+                detailedType: apiDetailedErrorType.Failed,
+                message: "Failed to delete file",
+              });
+            }
 
-              const { error: dbUpdateFileLocationError } = await tc(
-                db
-                  .update(files)
-                  .set({
-                    ufsKey: up_utfs_response.data.key,
-                    url: up_utfs_response.data.ufsUrl,
+            const dbDelBlob = await handleDatabaseInteraction(
+              db
+                .update(files)
+                .set({
+                  blobPath: null,
 
-                    updatedAt: new Date(),
-                  })
-                  .where(eq(files.id, file.id)),
-              );
-              if (dbUpdateFileLocationError) {
-                console.error(dbUpdateFileLocationError);
-                return err({
-                  type: runFileTransfersErrorTypes.UploadFailed,
-                  message: "Failed to update file location",
-                });
-              }
-              break;
-            case "blob":
-              const { data: up_blob_response, error: up_blob_error } = await tc(
-                put(
-                  `wahlen/${process.env.NODE_ENV}/${file.owner}/${file.name}`,
-                  blob,
-                  {
-                    access: "public",
-                  },
-                ),
-              );
-              if (up_blob_error) {
-                console.error(up_blob_error);
-                return err({
-                  type: runFileTransfersErrorTypes.UploadFailed,
-                  message: "Failed to upload file",
-                });
-              }
-              if (!up_blob_response.pathname) {
-                console.error("No Path Provided");
-                return err({
-                  type: runFileTransfersErrorTypes.NoProviderIdentifier,
-                  message: "No Path Provided",
-                });
-              }
-              if (!up_blob_response.url) {
-                console.error("No URL Provided");
-                return err({
-                  type: runFileTransfersErrorTypes.NoProviderIdentifier,
-                  message: "No URL Provided",
-                });
-              }
+                  updatedAt: new Date(),
+                })
+                .where(eq(files.id, file.id))
+                .returning(),
+              true,
+            );
+            if (dbDelBlob.isErr()) {
+              return err(dbDelBlob.error);
+            }
 
-              const { error: dbUpdateBlobLocationError } = await tc(
-                db
-                  .update(files)
-                  .set({
-                    blobPath: up_blob_response.pathname,
-                    url: up_blob_response.url,
-
-                    updatedAt: new Date(),
-                  })
-                  .where(eq(files.id, file.id)),
-              );
-              if (dbUpdateBlobLocationError) {
-                console.error(dbUpdateBlobLocationError);
-                return err({
-                  type: runFileTransfersErrorTypes.UploadFailed,
-                  message: "Failed to update file location",
-                });
-              }
-              break;
-          }
-
-          switch (file.storedIn) {
-            case "utfs":
-              if (!file.ufsKey) {
-                return err({
-                  type: runFileTransfersErrorTypes.NoProviderIdentifier,
-                  message: "No Key Provided",
-                });
-              }
-
-              const { data: del_utfs_response, error: del_utfs_error } =
-                await tc(utapi.deleteFiles(file.ufsKey));
-              if (del_utfs_error) {
-                console.error(del_utfs_error);
-                return err({
-                  type: runFileTransfersErrorTypes.DeleteFailed,
-                  message: "Failed to delete file",
-                });
-              }
-              if (
-                !del_utfs_response.success ||
-                del_utfs_response.deletedCount !== 1
-              ) {
-                console.error("Failed to delete file");
-                return err({
-                  type: runFileTransfersErrorTypes.DeleteFailed,
-                  message: "Failed to delete file",
-                });
-              }
-
-              const { error: dbDelUtfsError } = await tc(
-                db
-                  .update(files)
-                  .set({
-                    ufsKey: null,
-
-                    updatedAt: new Date(),
-                  })
-                  .where(eq(files.id, file.id)),
-              );
-              if (dbDelUtfsError) {
-                console.error(dbDelUtfsError);
-                return err({
-                  type: runFileTransfersErrorTypes.DeleteFailed,
-                  message: "Failed to delete file",
-                });
-              }
-              break;
-            case "blob":
-              if (!file.blobPath) {
-                return err({
-                  type: runFileTransfersErrorTypes.NoProviderIdentifier,
-                  message: "No Path Provided",
-                });
-              }
-
-              const { error: del_blob_error } = await tc(del(file.blobPath));
-              if (del_blob_error) {
-                console.error(del_blob_error);
-                return err({
-                  type: runFileTransfersErrorTypes.DeleteFailed,
-                  message: "Failed to delete file",
-                });
-              }
-
-              const { error: dbDelBlobError } = await tc(
-                db
-                  .update(files)
-                  .set({
-                    blobPath: null,
-
-                    updatedAt: new Date(),
-                  })
-                  .where(eq(files.id, file.id)),
-              );
-              if (dbDelBlobError) {
-                console.error(dbDelBlobError);
-                return err({
-                  type: runFileTransfersErrorTypes.DeleteFailed,
-                  message: "Failed to delete file",
-                });
-              }
-
-              break;
-          }
-
-          const { error: dbUpdateStatusError } = await tc(
-            db
-              .update(files)
-              .set({
-                storedIn: file.targetStorage,
-                transferStatus: "idle",
-
-                updatedAt: new Date(),
-              })
-              .where(eq(files.id, file.id)),
-          );
-          if (dbUpdateStatusError) {
-            console.error(dbUpdateStatusError);
-            return err({
-              type: runFileTransfersErrorTypes.RequestFailed,
-              message: "Failed to update file status",
-            });
-          }
+            break;
         }
-        return ok();
-      },
-    ),
+
+        const dbUpdateStatus = await handleDatabaseInteraction(
+          db
+            .update(files)
+            .set({
+              storedIn: file.targetStorage,
+              transferStatus: "idle",
+
+              updatedAt: new Date(),
+            })
+            .where(eq(files.id, file.id))
+            .returning(),
+          true,
+        );
+        if (dbUpdateStatus.isErr()) {
+          return err(dbUpdateStatus.error);
+        }
+      }
+      return ok({
+        type: apiResponseTypes.Inconsequential,
+      });
+    }),
   }),
 });
