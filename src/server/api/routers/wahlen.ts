@@ -15,9 +15,12 @@ import { tc } from "~/lib/tryCatch";
 import {
   apiDetailedErrorType,
   apiErrorTypes,
+  apiResponseDetailedTypes,
   apiResponseTypes,
   apiType,
   blankPlaceholdingCallableProcedure,
+  databaseInteractionTypes,
+  handleDatabaseInteraction,
   identifyingInputType,
   validateEditability,
 } from "./utility";
@@ -40,16 +43,12 @@ const editWahlType = z.object({
 
   alert: z.enum(["card", "info", "warning", "error"]).optional().nullable(),
   alertMessage: z.string().min(3).max(256).optional(),
-
-  startDate: z.date().optional(),
-  endDate: z.date().optional(),
-  archiveDate: z.date().optional(),
 });
 
 const scheduleWahlType = z.object({
   id: z.string().uuid(),
-  startDate: z.date().optional(),
-  endDate: z.date().optional(),
+  startDate: z.date(),
+  endDate: z.date(),
 });
 
 const getByShortnameType = z.object({
@@ -73,31 +72,21 @@ export const wahlenRouter = createTRPCRouter({
 
         owner: input.owner,
       };
-      const { data: insertableResponse, error: insertableError } = await tc(
-        db.insert(wahlen).values(insertable).returning(),
-      );
-      if (insertableError) {
-        return err({
-          type: apiErrorTypes.BadRequest,
-          detailedType: apiDetailedErrorType.BadRequestUnknown,
-          message: "Database rejected insert operation",
-        });
-      }
 
-      const response = insertableResponse[0] ?? null;
-      if (!response) {
-        return err({
-          type: apiErrorTypes.BadRequest,
-          detailedType:
-            apiDetailedErrorType.BadRequestSequentialOperationFailure,
-          message: "Database successfully inserted but did not return data",
-        });
+      const response = await handleDatabaseInteraction(
+        db.insert(wahlen).values(insertable).returning(),
+        true,
+        databaseInteractionTypes.Sequencial,
+      );
+      if (response.isErr()) {
+        return err(response.error);
       }
 
       return ok({
         type: apiResponseTypes.Success,
+        detailedType: apiResponseDetailedTypes.Success,
 
-        data: response,
+        data: response.value.data!,
       });
     }),
   edit: protectedProcedure
@@ -108,26 +97,7 @@ export const wahlenRouter = createTRPCRouter({
         return err(vE.error);
       }
 
-      const { data: dataArray, error: dbError } = await tc(
-        db.select().from(wahlen).where(eq(wahlen.id, input.id)),
-      );
-      if (dbError) {
-        return err({
-          type: apiErrorTypes.BadRequest,
-          detailedType: apiDetailedErrorType.BadRequestUnknown,
-          message: "Database query failed",
-        });
-      }
-
-      const data = dataArray[0] ?? null;
-      if (!data) {
-        return err({
-          type: apiErrorTypes.NotFound,
-          message: "Wahl not found",
-        });
-      }
-
-      const { data: insertableResponse, error: insertableError } = await tc(
+      const response = await handleDatabaseInteraction(
         db
           .update(wahlen)
           .set({
@@ -139,38 +109,21 @@ export const wahlenRouter = createTRPCRouter({
             title: input.title,
             description: input.description,
 
-            startDate: input.startDate,
-            endDate: input.endDate,
-            archiveDate: input.archiveDate,
-
-            createdAt: data.createdAt,
             updatedAt: new Date(),
           })
           .where(eq(wahlen.id, input.id))
           .returning(),
+        true,
+        databaseInteractionTypes.Sequencial,
       );
-      if (insertableError) {
-        return err({
-          type: apiErrorTypes.BadRequest,
-          detailedType: apiDetailedErrorType.BadRequestUnknown,
-          message: "Database rejected insert operation",
-        });
-      }
-
-      const response = insertableResponse[0] ?? null;
-      if (!response) {
-        return err({
-          type: apiErrorTypes.BadRequest,
-          detailedType:
-            apiDetailedErrorType.BadRequestSequentialOperationFailure,
-          message: "Database successfully inserted but did not return data",
-        });
+      if (response.isErr()) {
+        return err(response.error);
       }
 
       return ok({
         type: apiResponseTypes.Success,
 
-        data: response,
+        data: response.value.data!,
       });
     }),
 
@@ -182,7 +135,7 @@ export const wahlenRouter = createTRPCRouter({
         return err(vE.error);
       }
 
-      const { data: insertableResponse, error: insertableError } = await tc(
+      const response = await handleDatabaseInteraction(
         db
           .update(wahlen)
           .set({
@@ -195,25 +148,16 @@ export const wahlenRouter = createTRPCRouter({
           })
           .where(eq(wahlen.id, input.id))
           .returning(),
+        true,
       );
-      if (insertableError) {
-        return err({
-          type: apiErrorTypes.BadRequest,
-          detailedType: apiDetailedErrorType.BadRequestUnknown,
-          message: "Database rejected insert operation",
-        });
+      if (response.isErr()) {
+        return err(response.error);
       }
 
-      const response = insertableResponse[0] ?? null;
-      if (!response) {
-        return err({
-          type: apiErrorTypes.NotFound,
-          message: "Wahl not found",
-        });
-      }
       return ok({
         type: apiResponseTypes.Success,
-        data: response,
+
+        data: response.value.data!,
       });
     }),
 
@@ -224,7 +168,8 @@ export const wahlenRouter = createTRPCRouter({
       if (vE.isErr()) {
         return err(vE.error);
       }
-      const { data: insertableResponse, error: insertableError } = await tc(
+
+      const response = await handleDatabaseInteraction(
         db
           .update(wahlen)
           .set({
@@ -237,25 +182,16 @@ export const wahlenRouter = createTRPCRouter({
           })
           .where(eq(wahlen.id, input.id))
           .returning(),
+        true,
       );
-      if (insertableError) {
-        return err({
-          type: apiErrorTypes.BadRequest,
-          detailedType: apiDetailedErrorType.BadRequestUnknown,
-          message: "Database rejected insert operation",
-        });
+      if (response.isErr()) {
+        return err(response.error);
       }
 
-      const response = insertableResponse[0] ?? null;
-      if (!response) {
-        return err({
-          type: apiErrorTypes.NotFound,
-          message: "Wahl not found",
-        });
-      }
       return ok({
         type: apiResponseTypes.Success,
-        data: response,
+
+        data: response.value.data!,
       });
     }),
 
@@ -267,7 +203,7 @@ export const wahlenRouter = createTRPCRouter({
         return err(vE.error);
       }
 
-      const { data: insertableResponse, error: insertableError } = await tc(
+      const response = await handleDatabaseInteraction(
         db
           .update(wahlen)
           .set({
@@ -279,26 +215,16 @@ export const wahlenRouter = createTRPCRouter({
           })
           .where(eq(wahlen.id, input.id))
           .returning(),
+        true,
       );
-      if (insertableError) {
-        return err({
-          type: apiErrorTypes.BadRequest,
-          detailedType: apiDetailedErrorType.BadRequestUnknown,
-          message: "Database rejected insert operation",
-        });
-      }
-
-      const response = insertableResponse[0] ?? null;
-      if (!response) {
-        return err({
-          type: apiErrorTypes.NotFound,
-          message: "Wahl not found",
-        });
+      if (response.isErr()) {
+        return err(response.error);
       }
 
       return ok({
         type: apiResponseTypes.Success,
-        data: response,
+
+        data: response.value.data!,
       });
     }),
 
@@ -310,7 +236,7 @@ export const wahlenRouter = createTRPCRouter({
         return err(vE.error);
       }
 
-      const { data: insertableResponse, error: insertableError } = await tc(
+      const response = await handleDatabaseInteraction(
         db
           .update(wahlen)
           .set({
@@ -322,26 +248,16 @@ export const wahlenRouter = createTRPCRouter({
           })
           .where(eq(wahlen.id, input.id))
           .returning(),
+        true,
       );
-      if (insertableError) {
-        return err({
-          type: apiErrorTypes.BadRequest,
-          detailedType: apiDetailedErrorType.BadRequestUnknown,
-          message: "Database rejected insert operation",
-        });
-      }
-
-      const response = insertableResponse[0] ?? null;
-      if (!response) {
-        return err({
-          type: apiErrorTypes.NotFound,
-          message: "Wahl not found",
-        });
+      if (response.isErr()) {
+        return err(response.error);
       }
 
       return ok({
         type: apiResponseTypes.Success,
-        data: response,
+
+        data: response.value.data!,
       });
     }),
 
@@ -353,7 +269,7 @@ export const wahlenRouter = createTRPCRouter({
         return err(vE.error);
       }
 
-      const { data: insertableResponse, error: insertableError } = await tc(
+      const response = await handleDatabaseInteraction(
         db
           .update(wahlen)
           .set({
@@ -364,26 +280,16 @@ export const wahlenRouter = createTRPCRouter({
           })
           .where(eq(wahlen.id, input.id))
           .returning(),
+        true,
       );
-      if (insertableError) {
-        return err({
-          type: apiErrorTypes.BadRequest,
-          detailedType: apiDetailedErrorType.BadRequestUnknown,
-          message: "Database rejected insert operation",
-        });
-      }
-
-      const response = insertableResponse[0] ?? null;
-      if (!response) {
-        return err({
-          type: apiErrorTypes.NotFound,
-          message: "Wahl not found",
-        });
+      if (response.isErr()) {
+        return err(response.error);
       }
 
       return ok({
         type: apiResponseTypes.Success,
-        data: response,
+
+        data: response.value.data!,
       });
     }),
 
@@ -395,7 +301,7 @@ export const wahlenRouter = createTRPCRouter({
         return err(vE.error);
       }
 
-      const { data: insertableResponse, error: insertableError } = await tc(
+      const response = await handleDatabaseInteraction(
         db
           .update(wahlen)
           .set({
@@ -406,26 +312,16 @@ export const wahlenRouter = createTRPCRouter({
           })
           .where(eq(wahlen.id, input.id))
           .returning(),
+        true,
       );
-      if (insertableError) {
-        return err({
-          type: apiErrorTypes.BadRequest,
-          detailedType: apiDetailedErrorType.BadRequestUnknown,
-          message: "Database rejected insert operation",
-        });
-      }
-
-      const response = insertableResponse[0] ?? null;
-      if (!response) {
-        return err({
-          type: apiErrorTypes.NotFound,
-          message: "Wahl not found",
-        });
+      if (response.isErr()) {
+        return err(response.error);
       }
 
       return ok({
         type: apiResponseTypes.Success,
-        data: response,
+
+        data: response.value.data!,
       });
     }),
 
@@ -435,58 +331,36 @@ export const wahlenRouter = createTRPCRouter({
     byId: publicProcedure
       .input(identifyingInputType)
       .query(async ({ input }): apiType<typeof wahlen.$inferSelect> => {
-        const { data: resArray, error: dbError } = await tc(
+        const response = await handleDatabaseInteraction(
           db.select().from(wahlen).where(eq(wahlen.id, input.id)),
+          true,
         );
-        if (dbError) {
-          return err({
-            type: apiErrorTypes.BadRequest,
-            detailedType: apiDetailedErrorType.BadRequestUnknown,
-            message: "Database query failed",
-          });
-        }
-
-        const res = resArray[0] ?? null;
-        if (!res) {
-          return err({
-            type: apiErrorTypes.NotFound,
-            message: "Wahl not found",
-          });
+        if (response.isErr()) {
+          return err(response.error);
         }
 
         return ok({
           type: apiResponseTypes.Success,
 
-          data: res,
+          data: response.value.data!,
         });
       }),
 
     byShortname: publicProcedure
       .input(getByShortnameType)
       .query(async ({ input }): apiType<typeof wahlen.$inferSelect> => {
-        const { data: resArray, error: dbError } = await tc(
+        const response = await handleDatabaseInteraction(
           db.select().from(wahlen).where(eq(wahlen.shortname, input.shortname)),
+          true,
         );
-        if (dbError) {
-          return err({
-            type: apiErrorTypes.BadRequest,
-            detailedType: apiDetailedErrorType.BadRequestUnknown,
-            message: "Database query failed",
-          });
-        }
-
-        const res = resArray[0] ?? null;
-        if (!res) {
-          return err({
-            type: apiErrorTypes.NotFound,
-            message: "Wahl not found",
-          });
+        if (response.isErr()) {
+          return err(response.error);
         }
 
         return ok({
           type: apiResponseTypes.Success,
 
-          data: res,
+          data: response.value.data!,
         });
       }),
 

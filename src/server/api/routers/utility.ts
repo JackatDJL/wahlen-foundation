@@ -40,6 +40,7 @@ export enum apiDetailedErrorType {
   BadRequestUnknown = "BadRequest.Unknown",
   BadRequestInternalServerError = "BadRequest.InternalServerError",
   BadRequestSequentialOperationFailure = "BadRequest.SequentialOperationFailure",
+  BadRequestCorrupted = "BadRequest.Corrupted",
 
   // Conflict types
   ConflictDuplicate = "Conflict.Duplicate",
@@ -139,6 +140,72 @@ export type apiResponse<T> =
     };
 
 export type apiType<T> = Promise<Result<apiResponse<T>, apiError>>;
+
+export enum databaseInteractionTypes {
+  Default = "Default",
+  Sequencial = "Sequencial",
+}
+
+/**
+ * Simplifies database query operations by handling common error patterns and type checking.
+ *
+ * This utility function wraps database operations in try-catch logic and provides standardized
+ * error handling for database interactions. It expects array results and can check for empty results.
+ *
+ * @param query The database query to execute
+ * @param errorMessage Optional custom error message for NotFound errors
+ * @returns A Result containing either the first item from the result array or an apiError
+ */
+export async function handleDatabaseInteraction<T, D extends boolean = true>(
+  query: Promise<T[]>,
+  deconstructArray = true as D,
+  interactionType: databaseInteractionTypes = databaseInteractionTypes.Default,
+): apiType<D extends true ? T : T[]> {
+  const { data: resultArray, error: dbError } = await tc(query);
+  if (dbError) {
+    console.error(dbError);
+    return err({
+      type: apiErrorTypes.BadRequest,
+      detailedType: apiDetailedErrorType.BadRequestInternalServerError,
+      message: "Database operation failed",
+    });
+  }
+
+  if (!deconstructArray) {
+    return ok({
+      type: apiResponseTypes.Success,
+
+      data: resultArray! as any, // Type assertion needed due to conditional return type
+    });
+  }
+
+  const result = resultArray?.[0];
+  if (!result || result === undefined) {
+    switch (interactionType) {
+      default:
+      case databaseInteractionTypes.Default:
+        return err({
+          type: apiErrorTypes.NotFound,
+          detailedType: apiDetailedErrorType.NotFound,
+          message: "No results found",
+        });
+      case databaseInteractionTypes.Sequencial:
+        return err({
+          type: apiErrorTypes.BadRequest,
+          detailedType:
+            apiDetailedErrorType.BadRequestSequentialOperationFailure,
+          message: "Results should Exist but were not found",
+        });
+    }
+  }
+
+  return ok({
+    type: apiResponseTypes.Success,
+    detailedType: apiResponseDetailedTypes.Success,
+
+    data: result! as any,
+  });
+}
 
 /**
  * Updates election status fields based on timing and existing state.
