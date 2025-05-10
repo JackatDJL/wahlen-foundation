@@ -1,11 +1,13 @@
 import { or, eq } from "drizzle-orm";
-import { err, ok, type Result } from "neverthrow";
+import { err, type Ok, ok, type Result } from "neverthrow";
 import { z } from "zod";
 import { tc } from "~/lib/tryCatch";
 import { db } from "~/server/db";
 import { questions } from "~/server/db/schema/questions";
 import { wahlen } from "~/server/db/schema/wahlen";
 import { publicProcedure } from "../trpc";
+import posthog from "posthog-js";
+import * as Sentry from "@sentry/nextjs";
 
 export const uuidType = z.string().uuid();
 
@@ -17,7 +19,7 @@ export const blankPlaceholdingCallableProcedure = publicProcedure.mutation(
   () => "",
 );
 
-export enum apiErrorTypes {
+export enum apiErrorStatus {
   NotFound = "NotFound",
   Forbidden = "Forbidden",
   BadRequest = "BadRequest",
@@ -27,7 +29,7 @@ export enum apiErrorTypes {
   Failed = "Failed",
 }
 
-export enum apiDetailedErrorType {
+export enum apiErrorTypes {
   NotFound = "NotFound",
 
   // Forbidden types
@@ -64,37 +66,45 @@ export enum apiDetailedErrorType {
 
 export type apiError =
   | {
-      type: apiErrorTypes.ValidationError;
-      detailedType: apiDetailedErrorType.ValidationErrorZod;
+      status: apiErrorStatus.ValidationError;
+      type: apiErrorTypes.ValidationErrorZod;
       message: string;
       validationError: z.ZodError;
     }
   | {
-      type: apiErrorTypes.NotFound;
-      detailedType?: apiDetailedErrorType.NotFound;
+      status: apiErrorStatus.BadRequest;
+      type:
+        | apiErrorTypes.BadRequestCorrupted
+        | apiErrorTypes.BadRequestInternalServerError
+        | apiErrorTypes.BadRequestSequentialOperationFailure
+        | apiErrorTypes.BadRequestUnknown;
+      message: string;
+      error: unknown;
+    }
+  | {
+      status: apiErrorStatus.NotFound;
+      type?: apiErrorTypes.NotFound;
       message: string;
     }
   | {
-      type: apiErrorTypes.Failed;
-      detailedType?:
-        | apiDetailedErrorType.FailedUnknown
-        | apiDetailedErrorType.Failed;
+      status: apiErrorStatus.Failed;
+      type?: apiErrorTypes.FailedUnknown | apiErrorTypes.Failed;
       message: string;
     }
   | {
+      status: apiErrorStatus;
       type: apiErrorTypes;
-      detailedType: apiDetailedErrorType;
       message: string;
     };
 
-export enum apiResponseTypes {
+export enum apiResponseStatus {
   Success = "Success",
   PartialSuccess = "PartialSuccess",
   FailForeward = "FailForeward",
   Inconsequential = "Inconsequential",
 }
 
-export enum apiResponseDetailedTypes {
+export enum apiResponseTypes {
   Success = "Success",
   SuccessNoData = "Success.NoData",
 
@@ -112,29 +122,29 @@ export enum apiResponseDetailedTypes {
 }
 export type apiResponse<T> =
   | {
-      type: apiResponseTypes.Inconsequential;
-      detailedType?: apiResponseDetailedTypes.Inconsequential;
+      status: apiResponseStatus.Inconsequential;
+      type?: apiResponseTypes.Inconsequential;
       message?: string;
       data?: T extends void | undefined | null ? undefined : T;
     }
   | {
-      type: apiResponseTypes.Success;
-      detailedType?: apiResponseDetailedTypes.Success;
+      status: apiResponseStatus.Success;
+      type?: apiResponseTypes.Success;
       message?: string;
       data: T;
     }
   | {
-      type: apiResponseTypes.Success;
-      detailedType: apiResponseDetailedTypes.SuccessNoData;
+      status: apiResponseStatus.Success;
+      type: apiResponseTypes.SuccessNoData;
       message?: string;
       data?: T extends void | undefined | null ? undefined : T;
     }
   | {
-      type: apiResponseTypes.FailForeward;
-      detailedType:
-        | apiResponseDetailedTypes.FailForewardOverwriteMessage
-        | apiResponseDetailedTypes.FailForewardAppendMessage
-        | apiResponseDetailedTypes.FailForewardForceStatus;
+      status: apiResponseStatus.FailForeward;
+      type:
+        | apiResponseTypes.FailForewardOverwriteMessage
+        | apiResponseTypes.FailForewardAppendMessage
+        | apiResponseTypes.FailForewardForceStatus;
       message: string;
       data: T extends void | undefined | null ? never : T;
     };
@@ -146,6 +156,26 @@ export enum databaseInteractionTypes {
   Sequencial = "Sequencial",
 }
 
+export function deconstructValue<T>(
+  neverthrowOk: Ok<apiResponse<T>, apiError>,
+): apiResponse<T> & { data(): T } {
+  return {
+    ...neverthrowOk.value,
+    data: () => neverthrowOk.value.data as T,
+  } as apiResponse<T> & { data(): T };
+}
+
+export function reportError(error: apiError): apiError {
+  console.error(error);
+
+  Sentry.captureException(error);
+  posthog.captureException(error);
+  return error;
+}
+
+// alias for return err({}: apiError).mapErr(orReport)
+export const orReport = reportError;
+
 /**
  * Simplifies database query operations by handling common error patterns and type checking.
  *
@@ -156,25 +186,25 @@ export enum databaseInteractionTypes {
  * @param errorMessage Optional custom error message for NotFound errors
  * @returns A Result containing either the first item from the result array or an apiError
  */
-export async function handleDatabaseInteraction<T, D extends boolean = true>(
+export async function databaseInteraction<T, D extends boolean = true>(
   query: Promise<T[]>,
   deconstructArray = true as D,
   interactionType: databaseInteractionTypes = databaseInteractionTypes.Default,
 ): apiType<D extends true ? T : T[]> {
   const { data: resultArray, error: dbError } = await tc(query);
   if (dbError) {
-    console.error(dbError);
     return err({
-      type: apiErrorTypes.BadRequest,
-      detailedType: apiDetailedErrorType.BadRequestInternalServerError,
+      status: apiErrorStatus.BadRequest,
+      type: apiErrorTypes.BadRequestInternalServerError,
       message: "Database operation failed",
-    });
+      error: dbError,
+    }).mapErr(orReport);
   }
 
   if (!deconstructArray) {
     return ok({
+      status: apiResponseStatus.Success,
       type: apiResponseTypes.Success,
-      detailedType: apiResponseDetailedTypes.Success,
 
       data: resultArray as D extends true ? T : T[],
     });
@@ -186,23 +216,22 @@ export async function handleDatabaseInteraction<T, D extends boolean = true>(
       default:
       case databaseInteractionTypes.Default:
         return err({
+          status: apiErrorStatus.NotFound,
           type: apiErrorTypes.NotFound,
-          detailedType: apiDetailedErrorType.NotFound,
           message: "No results found",
         });
       case databaseInteractionTypes.Sequencial:
         return err({
-          type: apiErrorTypes.BadRequest,
-          detailedType:
-            apiDetailedErrorType.BadRequestSequentialOperationFailure,
+          status: apiErrorStatus.BadRequest,
+          type: apiErrorTypes.BadRequestSequentialOperationFailure,
           message: "Results should Exist but were not found",
-        });
+        }).mapErr(orReport);
     }
   }
 
   return ok({
+    status: apiResponseStatus.Success,
     type: apiResponseTypes.Success,
-    detailedType: apiResponseDetailedTypes.Success,
 
     data: resultArray as D extends true ? T : T[],
   });
@@ -228,8 +257,8 @@ export async function updateElectionStatus(
   const { success, error } = uuidType.safeParse(id);
   if (!success) {
     return err({
-      type: apiErrorTypes.ValidationError,
-      detailedType: apiDetailedErrorType.ValidationErrorZod,
+      status: apiErrorStatus.ValidationError,
+      type: apiErrorTypes.ValidationErrorZod,
       message: "Input is not a valid UUID",
       validationError: error,
     });
@@ -244,10 +273,9 @@ export async function updateElectionStatus(
   );
 
   if (dbQError) {
-    console.error(dbQError);
     return err({
-      type: apiErrorTypes.BadRequest,
-      detailedType: apiDetailedErrorType.BadRequestInternalServerError,
+      status: apiErrorStatus.BadRequest,
+      type: apiErrorTypes.BadRequestInternalServerError,
       message: "Question database query failed",
     });
   }
@@ -265,8 +293,8 @@ export async function updateElectionStatus(
   if (dbError) {
     console.error(dbError);
     return err({
-      type: apiErrorTypes.BadRequest,
-      detailedType: apiDetailedErrorType.BadRequestInternalServerError,
+      status: apiErrorStatus.BadRequest,
+      type: apiErrorTypes.BadRequestInternalServerError,
       message: "Election database query failed",
     });
   }
@@ -274,49 +302,48 @@ export async function updateElectionStatus(
   const election = electionArray?.[0];
   if (!election) {
     return err({
+      status: apiErrorStatus.NotFound,
       type: apiErrorTypes.NotFound,
-      detailedType: apiDetailedErrorType.NotFound,
       message: "Election not found",
     });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- merging in progress
   const now = new Date();
   const updates: Partial<typeof election> = {};
 
-  // // Status logic based on dates and current state
-  // if (
-  //   election.startDate &&
-  //   new Date(election.startDate) <= now &&
-  //   !election.isCompleted
-  // ) {
-  //   updates.isActive = true;
-  // }
+  // Status logic based on dates and current state
+  if (
+    election.startDate &&
+    new Date(election.startDate) <= now &&
+    !election.isCompleted
+  ) {
+    updates.isActive = true;
+  }
 
-  // if (election.endDate && new Date(election.endDate) <= now) {
-  //   updates.isActive = false;
-  //   updates.isCompleted = true;
-  // }
+  if (election.endDate && new Date(election.endDate) <= now) {
+    updates.isActive = false;
+    updates.isCompleted = true;
+  }
 
-  // if ((election.startDate || election.endDate) && !election.isPublished) {
-  //   updates.startDate = null;
-  //   updates.endDate = null;
-  //   updates.isScheduled = false;
-  // }
+  if ((election.startDate || election.endDate) && !election.isPublished) {
+    updates.startDate = null;
+    updates.endDate = null;
+    updates.isScheduled = false;
+  }
 
-  // if (!election.startDate) {
-  //   updates.isScheduled = false;
-  // }
+  if (!election.startDate) {
+    updates.isScheduled = false;
+  }
 
-  // // Validate archive state
-  // if (election.isArchived) {
-  //   updates.isActive = false;
-  //   updates.isScheduled = false;
-  //   updates.isCompleted = true;
-  // } else if (election.archiveDate) {
-  //   // Remove archive date if not archived
-  //   updates.archiveDate = null;
-  // }
+  // Validate archive state
+  if (election.isArchived) {
+    updates.isActive = false;
+    updates.isScheduled = false;
+    updates.isCompleted = true;
+  } else if (election.archiveDate) {
+    // Remove archive date if not archived
+    updates.archiveDate = null;
+  }
 
   // Only update if there are changes
   if (Object.keys(updates).length > 0) {
@@ -327,15 +354,15 @@ export async function updateElectionStatus(
     if (updateError) {
       console.error(updateError);
       return err({
-        type: apiErrorTypes.BadRequest,
-        detailedType: apiDetailedErrorType.BadRequestInternalServerError,
+        status: apiErrorStatus.BadRequest,
+        type: apiErrorTypes.BadRequestInternalServerError,
         message: "Failed to update election status",
       });
     }
   }
 
   return ok({
-    type: apiResponseTypes.Inconsequential,
+    status: apiResponseStatus.Inconsequential,
     message: "Election status updated successfully",
   });
 }
@@ -347,6 +374,8 @@ export async function updateElectionStatus(
  * It fetches the election data and checks if it's in an editable state. If the election is active, completed,
  * has results, or is archived, editing is forbidden. Otherwise, it confirms the election is editable.
  *
+ * @alias throwIfActive
+ *
  * @param id - The UUID identifying a question or election.
  * @returns A Result signifying success if the election is non-active, or an error Result detailing the failure reason.
  */
@@ -356,8 +385,8 @@ export async function validateEditability(
   const { success, error } = uuidType.safeParse(id);
   if (!success) {
     return err({
-      type: apiErrorTypes.ValidationError,
-      detailedType: apiDetailedErrorType.ValidationErrorZod,
+      status: apiErrorStatus.ValidationError,
+      type: apiErrorTypes.ValidationErrorZod,
       message: "Input is not a valid UUID",
       validationError: error,
     });
@@ -382,8 +411,8 @@ export async function validateEditability(
   if (dbQError) {
     console.error(dbQError);
     return err({
-      type: apiErrorTypes.BadRequest,
-      detailedType: apiDetailedErrorType.BadRequestInternalServerError,
+      status: apiErrorStatus.BadRequest,
+      type: apiErrorTypes.BadRequestInternalServerError,
       message: "Question database query failed",
     });
   }
@@ -401,8 +430,8 @@ export async function validateEditability(
   if (dbError) {
     console.error(dbError);
     return err({
-      type: apiErrorTypes.BadRequest,
-      detailedType: apiDetailedErrorType.BadRequestInternalServerError,
+      status: apiErrorStatus.BadRequest,
+      type: apiErrorTypes.BadRequestInternalServerError,
       message: "Election database query failed",
     });
   }
@@ -410,27 +439,27 @@ export async function validateEditability(
   const election = electionArray?.[0];
   if (!election) {
     return err({
+      status: apiErrorStatus.NotFound,
       type: apiErrorTypes.NotFound,
-      detailedType: apiDetailedErrorType.NotFound,
       message: "Election not found",
     });
   }
 
   // Check if the election is in an editable state
-  // if (
-  //   election.isActive ||
-  //   election.isCompleted ||
-  //   election.hasResults ||
-  //   election.isArchived
-  // ) {
-  //   return err({
-  //     type: apiErrorTypes.Forbidden,
-  //     detailedType: apiDetailedErrorType.ForbiddenActivityMismatch,
-  //     message: "You cannot edit an active election!!!",
-  //   });
-  // }
+  if (
+    election.isActive ||
+    election.isCompleted ||
+    election.hasResults ||
+    election.isArchived
+  ) {
+    return err({
+      status: apiErrorStatus.Forbidden,
+      type: apiErrorTypes.ForbiddenActivityMismatch,
+      message: "You cannot edit an active election!!!",
+    });
+  }
 
   return ok({
-    type: apiResponseTypes.Inconsequential,
+    status: apiResponseStatus.Inconsequential,
   });
 }

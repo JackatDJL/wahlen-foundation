@@ -21,13 +21,13 @@ import crypto from "crypto";
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Used in JSDOC
 import { err, ok, type Result } from "neverthrow";
 import { tc } from "~/lib/tryCatch";
-import { handleDatabaseInteraction, validateEditability } from "./utility";
+import { databaseInteraction, validateEditability } from "./utility";
 import { files } from "~/server/db/schema/files";
 import {
-  apiDetailedErrorType,
   apiErrorTypes,
-  apiResponseDetailedTypes,
+  apiErrorStatus,
   apiResponseTypes,
+  apiResponseStatus,
   type apiType,
   uuidType,
 } from "./utility";
@@ -81,8 +81,8 @@ async function setInternalQuestionFile({
   });
   if (!success) {
     return err({
-      type: apiErrorTypes.ValidationError,
-      detailedType: apiDetailedErrorType.ValidationErrorZod,
+      status: apiErrorStatus.ValidationError,
+      type: apiErrorTypes.ValidationErrorZod,
       message: "Input is not of valid Type",
 
       zodError: error,
@@ -91,7 +91,7 @@ async function setInternalQuestionFile({
 
   switch (type) {
     case "info":
-      const iIRes = await handleDatabaseInteraction(
+      const iIRes = await databaseInteraction(
         db
           .update(questionInfo)
           .set({
@@ -108,13 +108,13 @@ async function setInternalQuestionFile({
       }
 
       return ok({
-        type: apiResponseTypes.Success,
+        status: apiResponseStatus.Success,
 
         data: iIRes.value.data!,
       });
 
     case "true_false":
-      const tFQ = await handleDatabaseInteraction(
+      const tFQ = await databaseInteraction(
         db
           .select()
           .from(questionTrueFalse)
@@ -128,7 +128,7 @@ async function setInternalQuestionFile({
 
       switch (answerId) {
         case tFQuestions.o1Id:
-          const tFo1 = await handleDatabaseInteraction(
+          const tFo1 = await databaseInteraction(
             db
               .update(questionTrueFalse)
               .set({
@@ -145,13 +145,13 @@ async function setInternalQuestionFile({
           }
 
           return ok({
-            type: apiResponseTypes.Success,
+            status: apiResponseStatus.Success,
 
             data: tFo1.value.data!,
           });
 
         case tFQuestions.o2Id:
-          const tFo2 = await handleDatabaseInteraction(
+          const tFo2 = await databaseInteraction(
             db
               .update(questionTrueFalse)
               .set({
@@ -167,21 +167,21 @@ async function setInternalQuestionFile({
           }
 
           return ok({
-            type: apiResponseTypes.Success,
+            status: apiResponseStatus.Success,
 
             data: tFo2.value.data!,
           });
 
         default:
           return err({
-            type: apiErrorTypes.NotFound,
+            status: apiErrorStatus.NotFound,
 
             message: "Answer not found",
           });
       }
 
     case "multiple_choice":
-      const mCQ = await handleDatabaseInteraction(
+      const mCQ = await databaseInteraction(
         db
           .select()
           .from(questionMultipleChoice)
@@ -196,7 +196,7 @@ async function setInternalQuestionFile({
       const answerIds = mCQuestions.content?.map((a) => a.id);
       if (!answerIds?.includes(answerId)) {
         return err({
-          type: apiErrorTypes.NotFound,
+          status: apiErrorStatus.NotFound,
           message: "Answer not found",
         });
       }
@@ -212,12 +212,12 @@ async function setInternalQuestionFile({
       });
       if (!editedContent?.length) {
         return err({
-          type: apiErrorTypes.NotFound,
+          status: apiErrorStatus.NotFound,
           message: "Answer not found",
         });
       }
 
-      const mcRes = await handleDatabaseInteraction(
+      const mcRes = await databaseInteraction(
         db
           .update(questionMultipleChoice)
           .set({
@@ -234,14 +234,14 @@ async function setInternalQuestionFile({
       }
 
       return ok({
-        type: apiResponseTypes.Success,
+        status: apiResponseStatus.Success,
 
         data: mcRes.value.data!,
       });
 
     default:
       return err({
-        type: apiErrorTypes.NotFound,
+        status: apiErrorStatus.NotFound,
         message: "Question not found",
       });
   }
@@ -284,15 +284,15 @@ async function removeInternalQuestionFile({
   });
   if (!success) {
     return err({
-      type: apiErrorTypes.ValidationError,
-      detailedType: apiDetailedErrorType.ValidationErrorZod,
+      status: apiErrorStatus.ValidationError,
+      type: apiErrorTypes.ValidationErrorZod,
       message: "Input is not of valid Type",
 
       zodError: error,
     });
   }
 
-  const response = await handleDatabaseInteraction(
+  const response = await databaseInteraction(
     db.select().from(questions).where(eq(questions.id, questionId)).limit(1),
     true,
   );
@@ -303,7 +303,7 @@ async function removeInternalQuestionFile({
 
   switch (question.type) {
     case "info":
-      const iIRes = await handleDatabaseInteraction(
+      const iIRes = await databaseInteraction(
         db
           .update(questionInfo)
           .set({
@@ -320,13 +320,13 @@ async function removeInternalQuestionFile({
       }
 
       return ok({
-        type: apiResponseTypes.Success,
+        status: apiResponseStatus.Success,
 
         data: iIRes.value.data!,
       });
 
     case "true_false":
-      const tFQ = await handleDatabaseInteraction(
+      const tFQ = await databaseInteraction(
         db
           .select()
           .from(questionTrueFalse)
@@ -341,7 +341,7 @@ async function removeInternalQuestionFile({
 
       switch (answerId) {
         case tFQuestions.o1Id:
-          const tFo1 = await handleDatabaseInteraction(
+          const tFo1 = await databaseInteraction(
             db
               .update(questionTrueFalse)
               .set({
@@ -358,13 +358,13 @@ async function removeInternalQuestionFile({
           }
 
           return ok({
-            type: apiResponseTypes.Success,
+            status: apiResponseStatus.Success,
 
             data: tFo1.value.data!,
           });
 
         case tFQuestions.o2Id:
-          const tFo2 = await handleDatabaseInteraction(
+          const tFo2 = await databaseInteraction(
             db
               .update(questionTrueFalse)
               .set({
@@ -381,20 +381,20 @@ async function removeInternalQuestionFile({
           }
 
           return ok({
-            type: apiResponseTypes.Success,
+            status: apiResponseStatus.Success,
 
             data: tFo2.value.data!,
           });
 
         default:
           return err({
-            type: apiErrorTypes.NotFound,
+            status: apiErrorStatus.NotFound,
             message: "Answer not found",
           });
       }
 
     case "multiple_choice":
-      const mCQ = await handleDatabaseInteraction(
+      const mCQ = await databaseInteraction(
         db
           .select()
           .from(questionMultipleChoice)
@@ -410,7 +410,7 @@ async function removeInternalQuestionFile({
       const answerIds = mCQuestions.content?.map((a) => a.id);
       if (!answerIds?.includes(answerId)) {
         return err({
-          type: apiErrorTypes.NotFound,
+          status: apiErrorStatus.NotFound,
           message: "Answer not found",
         });
       }
@@ -425,12 +425,12 @@ async function removeInternalQuestionFile({
       });
       if (!editedContent?.length) {
         return err({
-          type: apiErrorTypes.NotFound,
+          status: apiErrorStatus.NotFound,
           message: "Answer not found",
         });
       }
 
-      const mcRes = await handleDatabaseInteraction(
+      const mcRes = await databaseInteraction(
         db
           .update(questionMultipleChoice)
           .set({
@@ -447,14 +447,14 @@ async function removeInternalQuestionFile({
       }
 
       return ok({
-        type: apiResponseTypes.Success,
+        status: apiResponseStatus.Success,
 
         data: mcRes.value.data!,
       });
 
     default:
       return err({
-        type: apiErrorTypes.NotFound,
+        status: apiErrorStatus.NotFound,
         message: "Question not found",
       });
   }
@@ -481,14 +481,14 @@ export async function deleteById(
   const { success, error } = uuidType.safeParse(input);
   if (!success) {
     return err({
-      type: apiErrorTypes.ValidationError,
-      detailedType: apiDetailedErrorType.ValidationErrorZod,
+      status: apiErrorStatus.ValidationError,
+      type: apiErrorTypes.ValidationErrorZod,
       message: "Input is not of valid Type",
       zodError: error,
     });
   }
 
-  const f = await handleDatabaseInteraction(
+  const f = await databaseInteraction(
     db
       .select()
       .from(files)
@@ -504,8 +504,8 @@ export async function deleteById(
 
   if (file.transferStatus === "in progress") {
     return err({
-      type: apiErrorTypes.Conflict,
-      detailedType: apiDetailedErrorType.ConflictDataTranscending,
+      status: apiErrorStatus.Conflict,
+      type: apiErrorTypes.ConflictDataTranscending,
       message: "File is currently being transferred",
     });
   }
@@ -531,7 +531,7 @@ export async function deleteById(
 
     // const updatedFile = newFileArray ? newFileArray[0] : undefined;
 
-    const updatedFile = await handleDatabaseInteraction(
+    const updatedFile = await databaseInteraction(
       db
         .update(files)
         .set({
@@ -548,7 +548,7 @@ export async function deleteById(
 
     if (!updatedFile.value) {
       return err({
-        type: apiErrorTypes.NotFound,
+        status: apiErrorStatus.NotFound,
         message: "File not found",
       });
     }
@@ -559,15 +559,15 @@ export async function deleteById(
     case "utfs":
       if (!file.ufsKey) {
         return err({
-          type: apiErrorTypes.Incomplete,
-          detailedType: apiDetailedErrorType.IncompleteProviderIdentification,
+          status: apiErrorStatus.Incomplete,
+          type: apiErrorTypes.IncompleteProviderIdentification,
           message: "No UFS Key Provided",
         });
       }
       const deletionResponse = await utapi.deleteFiles(file.ufsKey);
       if (!deletionResponse.success || deletionResponse.deletedCount !== 1) {
         return err({
-          type: apiErrorTypes.Failed,
+          status: apiErrorStatus.Failed,
           message: "Failed to delete file",
         });
       }
@@ -575,8 +575,8 @@ export async function deleteById(
     case "blob":
       if (!file.blobPath) {
         return err({
-          type: apiErrorTypes.Incomplete,
-          detailedType: apiDetailedErrorType.IncompleteProviderIdentification,
+          status: apiErrorStatus.Incomplete,
+          type: apiErrorTypes.IncompleteProviderIdentification,
           message: "No Blob Path Provided",
         });
       }
@@ -585,7 +585,7 @@ export async function deleteById(
       if (blobDeleteError) {
         console.error(blobDeleteError);
         return err({
-          type: apiErrorTypes.Failed,
+          status: apiErrorStatus.Failed,
           message: "Failed to delete file",
         });
       }
@@ -602,7 +602,7 @@ export async function deleteById(
     return err(rIQF.error);
   }
 
-  const dbFileResponse = await handleDatabaseInteraction(
+  const dbFileResponse = await databaseInteraction(
     db.delete(files).where(eq(files.id, input)).returning(),
     true,
   );
@@ -611,8 +611,8 @@ export async function deleteById(
   }
 
   return ok({
-    type: apiResponseTypes.Success,
-    detailedType: apiResponseDetailedTypes.SuccessNoData,
+    status: apiResponseStatus.Success,
+    type: apiResponseTypes.SuccessNoData,
   });
 }
 
@@ -645,7 +645,7 @@ export const fileRouter = createTRPCRouter({
         return err(vE.error);
       }
 
-      const wahl = await handleDatabaseInteraction(
+      const wahl = await databaseInteraction(
         db
           .select()
           .from(questions)
@@ -657,7 +657,7 @@ export const fileRouter = createTRPCRouter({
         return err(wahl.error);
       }
 
-      const question = await handleDatabaseInteraction(
+      const question = await databaseInteraction(
         db
           .select()
           .from(questions)
@@ -692,7 +692,7 @@ export const fileRouter = createTRPCRouter({
         updatedAt: new Date(),
       };
 
-      const response = await handleDatabaseInteraction(
+      const response = await databaseInteraction(
         db.insert(files).values(file).returning(),
         true,
       );
@@ -711,7 +711,7 @@ export const fileRouter = createTRPCRouter({
       }
 
       return ok({
-        type: apiResponseTypes.Success,
+        status: apiResponseStatus.Success,
 
         data: {
           file: response.value.data!,
@@ -723,7 +723,7 @@ export const fileRouter = createTRPCRouter({
   get: publicProcedure
     .input(uuidType)
     .query(async ({ input }): apiType<GetFileReturnTypes> => {
-      const response = await handleDatabaseInteraction(
+      const response = await databaseInteraction(
         db
           .select()
           .from(files)
@@ -736,7 +736,7 @@ export const fileRouter = createTRPCRouter({
       }
 
       return ok({
-        type: apiResponseTypes.Success,
+        status: apiResponseStatus.Success,
 
         data: response.value.data!,
       });
@@ -752,7 +752,7 @@ export const fileRouter = createTRPCRouter({
       // First set all the files wo are idle and storedIn !== targetStorage to queued
       // This will probably only be called if i manually move around files between storage services
 
-      const dbInitiate = await handleDatabaseInteraction(
+      const dbInitiate = await databaseInteraction(
         db
           .update(files)
           .set({
@@ -772,7 +772,7 @@ export const fileRouter = createTRPCRouter({
         return err(dbInitiate.error);
       }
 
-      const dbResetSameStorage = await handleDatabaseInteraction(
+      const dbResetSameStorage = await databaseInteraction(
         db
           .update(files)
           .set({
@@ -792,7 +792,7 @@ export const fileRouter = createTRPCRouter({
         return err(dbResetSameStorage.error);
       }
 
-      const fTT = await handleDatabaseInteraction(
+      const fTT = await databaseInteraction(
         db.select().from(files).where(eq(files.transferStatus, "queued")),
         false,
       );
@@ -803,7 +803,7 @@ export const fileRouter = createTRPCRouter({
       const filesToTransfer = fTT.value.data!;
 
       for (const file of filesToTransfer) {
-        const SS = await handleDatabaseInteraction(
+        const SS = await databaseInteraction(
           db
             .update(files)
             .set({
@@ -825,9 +825,8 @@ export const fileRouter = createTRPCRouter({
         if (FetchError) {
           console.error(FetchError);
           return err({
-            type: apiErrorTypes.BadRequest,
-            detailedType:
-              apiDetailedErrorType.BadRequestSequentialOperationFailure,
+            status: apiErrorStatus.BadRequest,
+            type: apiErrorTypes.BadRequestSequentialOperationFailure,
             message: "Failed to fetch file",
           });
         }
@@ -836,7 +835,7 @@ export const fileRouter = createTRPCRouter({
           console.error(
             "Blob is Corrupted (Or Cloudflare making issues again), Aborting transfer",
           );
-          const abort = await handleDatabaseInteraction(
+          const abort = await databaseInteraction(
             db
               .update(files)
               .set({
@@ -853,8 +852,8 @@ export const fileRouter = createTRPCRouter({
           }
 
           return err({
-            type: apiErrorTypes.BadRequest,
-            detailedType: apiDetailedErrorType.BadRequestCorrupted,
+            status: apiErrorStatus.BadRequest,
+            type: apiErrorTypes.BadRequestCorrupted,
             message: "Blob is corrupted",
           });
         }
@@ -867,31 +866,29 @@ export const fileRouter = createTRPCRouter({
             if (up_utfs_error) {
               console.error(up_utfs_error);
               return err({
+                status: apiErrorStatus.Failed,
                 type: apiErrorTypes.Failed,
-                detailedType: apiDetailedErrorType.Failed,
                 message: "Failed to upload file",
               });
             }
             if (!up_utfs_response.data?.key) {
               console.error("No Key Provided");
               return err({
-                type: apiErrorTypes.Incomplete,
-                detailedType:
-                  apiDetailedErrorType.IncompleteProviderIdentification,
+                status: apiErrorStatus.Incomplete,
+                type: apiErrorTypes.IncompleteProviderIdentification,
                 message: "No Key Provided",
               });
             }
             if (!up_utfs_response.data?.ufsUrl) {
               console.error("No URL Provided");
               return err({
-                type: apiErrorTypes.Incomplete,
-                detailedType:
-                  apiDetailedErrorType.IncompleteProviderIdentification,
+                status: apiErrorStatus.Incomplete,
+                type: apiErrorTypes.IncompleteProviderIdentification,
                 message: "No URL Provided",
               });
             }
 
-            const dbUpdateFileLocation = await handleDatabaseInteraction(
+            const dbUpdateFileLocation = await databaseInteraction(
               db
                 .update(files)
                 .set({
@@ -922,29 +919,29 @@ export const fileRouter = createTRPCRouter({
             if (up_blob_error) {
               console.error(up_blob_error);
               return err({
+                status: apiErrorStatus.Failed,
                 type: apiErrorTypes.Failed,
-                detailedType: apiDetailedErrorType.Failed,
                 message: "Failed to upload file",
               });
             }
             if (!up_blob_response.pathname) {
               console.error("No Path Provided");
               return err({
-                type: apiErrorTypes.BadRequest,
-                detailedType: apiDetailedErrorType.BadRequestCorrupted,
+                status: apiErrorStatus.BadRequest,
+                type: apiErrorTypes.BadRequestCorrupted,
                 message: "No Path Provided",
               });
             }
             if (!up_blob_response.url) {
               console.error("No URL Provided");
               return err({
-                type: apiErrorTypes.BadRequest,
-                detailedType: apiDetailedErrorType.BadRequestCorrupted,
+                status: apiErrorStatus.BadRequest,
+                type: apiErrorTypes.BadRequestCorrupted,
                 message: "No URL Provided",
               });
             }
 
-            const dbUpdateBlobLocation = await handleDatabaseInteraction(
+            const dbUpdateBlobLocation = await databaseInteraction(
               db
                 .update(files)
                 .set({
@@ -967,9 +964,8 @@ export const fileRouter = createTRPCRouter({
           case "utfs":
             if (!file.ufsKey) {
               return err({
-                type: apiErrorTypes.Incomplete,
-                detailedType:
-                  apiDetailedErrorType.IncompleteProviderIdentification,
+                status: apiErrorStatus.Incomplete,
+                type: apiErrorTypes.IncompleteProviderIdentification,
                 message: "No UFS Key Provided",
               });
             }
@@ -980,8 +976,8 @@ export const fileRouter = createTRPCRouter({
             if (del_utfs_error) {
               console.error(del_utfs_error);
               return err({
+                status: apiErrorStatus.Failed,
                 type: apiErrorTypes.Failed,
-                detailedType: apiDetailedErrorType.Failed,
                 message: "Failed to delete file",
               });
             }
@@ -991,8 +987,8 @@ export const fileRouter = createTRPCRouter({
             ) {
               console.error("Failed to delete file");
               return err({
+                status: apiErrorStatus.Failed,
                 type: apiErrorTypes.Failed,
-                detailedType: apiDetailedErrorType.Failed,
                 message: "Failed to delete file",
               });
             }
@@ -1010,8 +1006,8 @@ export const fileRouter = createTRPCRouter({
             if (dbDelUtfsError) {
               console.error(dbDelUtfsError);
               return err({
+                status: apiErrorStatus.Failed,
                 type: apiErrorTypes.Failed,
-                detailedType: apiDetailedErrorType.Failed,
                 message: "Failed to delete file",
               });
             }
@@ -1019,8 +1015,8 @@ export const fileRouter = createTRPCRouter({
           case "blob":
             if (!file.blobPath) {
               return err({
-                type: apiErrorTypes.BadRequest,
-                detailedType: apiDetailedErrorType.BadRequestCorrupted,
+                status: apiErrorStatus.BadRequest,
+                type: apiErrorTypes.BadRequestCorrupted,
                 message: "No Path Provided",
               });
             }
@@ -1029,13 +1025,13 @@ export const fileRouter = createTRPCRouter({
             if (del_blob_error) {
               console.error(del_blob_error);
               return err({
+                status: apiErrorStatus.Failed,
                 type: apiErrorTypes.Failed,
-                detailedType: apiDetailedErrorType.Failed,
                 message: "Failed to delete file",
               });
             }
 
-            const dbDelBlob = await handleDatabaseInteraction(
+            const dbDelBlob = await databaseInteraction(
               db
                 .update(files)
                 .set({
@@ -1054,7 +1050,7 @@ export const fileRouter = createTRPCRouter({
             break;
         }
 
-        const dbUpdateStatus = await handleDatabaseInteraction(
+        const dbUpdateStatus = await databaseInteraction(
           db
             .update(files)
             .set({
@@ -1072,7 +1068,7 @@ export const fileRouter = createTRPCRouter({
         }
       }
       return ok({
-        type: apiResponseTypes.Inconsequential,
+        status: apiResponseStatus.Inconsequential,
       });
     }),
   }),
