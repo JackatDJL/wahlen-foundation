@@ -1,4 +1,4 @@
-import { eq, not, and, or, asc } from "drizzle-orm";
+import { eq, not, and, or } from "drizzle-orm";
 import { z } from "zod";
 
 import {
@@ -18,6 +18,7 @@ import {
 } from "~/server/db/schema/questions";
 import { utapi } from "~/server/uploadthing";
 import crypto from "crypto";
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- Used in JSDOC
 import { err, ok, type Result } from "neverthrow";
 import { tc } from "~/lib/tryCatch";
 import { handleDatabaseInteraction, validateEditability } from "./utility";
@@ -27,7 +28,7 @@ import {
   apiErrorTypes,
   apiResponseDetailedTypes,
   apiResponseTypes,
-  apiType,
+  type apiType,
   uuidType,
 } from "./utility";
 
@@ -787,17 +788,10 @@ export const fileRouter = createTRPCRouter({
           )
           .returning(),
       );
+      if (dbResetSameStorage.isErr()) {
+        return err(dbResetSameStorage.error);
+      }
 
-      // const { data: filesToTransfer, error: filesToTransferError } = await tc(
-      //   db.select().from(files).where(eq(files.transferStatus, "queued")),
-      // );
-      // if (filesToTransferError) {
-      //   console.error(filesToTransferError);
-      //   return err({
-      //     type: RunFileTransfersErrorTypes.RequestFailed,
-      //     message: "Failed to retrieve files to transfer",
-      //   });
-      // }
       const fTT = await handleDatabaseInteraction(
         db.select().from(files).where(eq(files.transferStatus, "queued")),
         false,
@@ -809,24 +803,6 @@ export const fileRouter = createTRPCRouter({
       const filesToTransfer = fTT.value.data!;
 
       for (const file of filesToTransfer) {
-        // Set Status
-        // const { error: SetStatusError } = await tc(
-        //   db
-        //     .update(files)
-        //     .set({
-        //       transferStatus: "in progress",
-
-        //       updatedAt: new Date(),
-        //     })
-        //     .where(eq(files.id, file.id)),
-        // );
-        // if (SetStatusError) {
-        //   console.error(SetStatusError);
-        //   return err({
-        //     type: RunFileTransfersErrorTypes.TransferFailed,
-        //     message: "Failed to update file status",
-        //   });
-        // }
         const SS = await handleDatabaseInteraction(
           db
             .update(files)
