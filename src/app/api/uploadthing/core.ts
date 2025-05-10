@@ -39,7 +39,7 @@ async function createFile({
   const response = await api.files.create(input);
   if (response.isErr()) {
     return err({
-      type: response.error.type,
+      type: response.error.status,
       message: response.error.message,
     });
   }
