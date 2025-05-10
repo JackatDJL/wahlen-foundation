@@ -174,8 +174,9 @@ export async function handleDatabaseInteraction<T, D extends boolean = true>(
   if (!deconstructArray) {
     return ok({
       type: apiResponseTypes.Success,
+      detailedType: apiResponseDetailedTypes.Success,
 
-      data: resultArray! as any, // Type assertion needed due to conditional return type
+      data: resultArray as D extends true ? T : T[],
     });
   }
 
@@ -203,7 +204,7 @@ export async function handleDatabaseInteraction<T, D extends boolean = true>(
     type: apiResponseTypes.Success,
     detailedType: apiResponseDetailedTypes.Success,
 
-    data: result! as any,
+    data: resultArray as D extends true ? T : T[],
   });
 }
 
@@ -279,42 +280,43 @@ export async function updateElectionStatus(
     });
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- merging in progress
   const now = new Date();
   const updates: Partial<typeof election> = {};
 
-  // Status logic based on dates and current state
-  if (
-    election.startDate &&
-    new Date(election.startDate) <= now &&
-    !election.isCompleted
-  ) {
-    updates.isActive = true;
-  }
+  // // Status logic based on dates and current state
+  // if (
+  //   election.startDate &&
+  //   new Date(election.startDate) <= now &&
+  //   !election.isCompleted
+  // ) {
+  //   updates.isActive = true;
+  // }
 
-  if (election.endDate && new Date(election.endDate) <= now) {
-    updates.isActive = false;
-    updates.isCompleted = true;
-  }
+  // if (election.endDate && new Date(election.endDate) <= now) {
+  //   updates.isActive = false;
+  //   updates.isCompleted = true;
+  // }
 
-  if ((election.startDate || election.endDate) && !election.isPublished) {
-    updates.startDate = null;
-    updates.endDate = null;
-    updates.isScheduled = false;
-  }
+  // if ((election.startDate || election.endDate) && !election.isPublished) {
+  //   updates.startDate = null;
+  //   updates.endDate = null;
+  //   updates.isScheduled = false;
+  // }
 
-  if (!election.startDate) {
-    updates.isScheduled = false;
-  }
+  // if (!election.startDate) {
+  //   updates.isScheduled = false;
+  // }
 
-  // Validate archive state
-  if (election.isArchived) {
-    updates.isActive = false;
-    updates.isScheduled = false;
-    updates.isCompleted = true;
-  } else if (election.archiveDate) {
-    // Remove archive date if not archived
-    updates.archiveDate = null;
-  }
+  // // Validate archive state
+  // if (election.isArchived) {
+  //   updates.isActive = false;
+  //   updates.isScheduled = false;
+  //   updates.isCompleted = true;
+  // } else if (election.archiveDate) {
+  //   // Remove archive date if not archived
+  //   updates.archiveDate = null;
+  // }
 
   // Only update if there are changes
   if (Object.keys(updates).length > 0) {
@@ -415,18 +417,18 @@ export async function validateEditability(
   }
 
   // Check if the election is in an editable state
-  if (
-    election.isActive ||
-    election.isCompleted ||
-    election.hasResults ||
-    election.isArchived
-  ) {
-    return err({
-      type: apiErrorTypes.Forbidden,
-      detailedType: apiDetailedErrorType.ForbiddenActivityMismatch,
-      message: "You cannot edit an active election!!!",
-    });
-  }
+  // if (
+  //   election.isActive ||
+  //   election.isCompleted ||
+  //   election.hasResults ||
+  //   election.isArchived
+  // ) {
+  //   return err({
+  //     type: apiErrorTypes.Forbidden,
+  //     detailedType: apiDetailedErrorType.ForbiddenActivityMismatch,
+  //     message: "You cannot edit an active election!!!",
+  //   });
+  // }
 
   return ok({
     type: apiResponseTypes.Inconsequential,
