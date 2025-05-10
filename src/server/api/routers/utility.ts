@@ -90,11 +90,13 @@ export type apiError =
       status: apiErrorStatus.Failed;
       type?: apiErrorTypes.FailedUnknown | apiErrorTypes.Failed;
       message: string;
+      error?: unknown;
     }
   | {
       status: apiErrorStatus;
       type: apiErrorTypes;
       message: string;
+      error?: unknown;
     };
 
 export enum apiResponseStatus {
