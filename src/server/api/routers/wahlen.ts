@@ -10,14 +10,11 @@ import {
 import { wahlen } from "~/server/db/schema/wahlen";
 import { randomUUID } from "crypto";
 import { eq } from "drizzle-orm";
-import { type Result, err, ok } from "neverthrow";
-import { tc } from "~/lib/tryCatch";
+import { err, ok } from "neverthrow";
 import {
-  apiDetailedErrorType,
-  apiErrorTypes,
   apiResponseDetailedTypes,
   apiResponseTypes,
-  apiType,
+  type apiType,
   blankPlaceholdingCallableProcedure,
   databaseInteractionTypes,
   handleDatabaseInteraction,
@@ -54,10 +51,6 @@ const scheduleWahlType = z.object({
 const getByShortnameType = z.object({
   shortname: z.string().min(3).max(25),
 });
-
-const generateResultsType = z.string().uuid();
-
-const getResultsType = z.string().uuid();
 
 export const wahlenRouter = createTRPCRouter({
   draft: protectedProcedure
