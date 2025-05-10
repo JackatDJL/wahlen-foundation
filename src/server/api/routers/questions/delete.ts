@@ -11,8 +11,7 @@ import {
 import { eq, or } from "drizzle-orm";
 import { deleteById } from "../files";
 import { deleteChunkProcedure } from "./delete-chunk";
-import { type Result, err, ok } from "neverthrow";
-import { tc } from "~/lib/tryCatch";
+import { err, ok } from "neverthrow";
 import {
   apiErrorTypes,
   apiErrorStatus,
@@ -64,17 +63,6 @@ export async function deleteRootQuestion(
   return response;
 }
 
-export enum deleteQuestionErrorTypes { // No inputtypeerror because auto validation
-  NotFound = "NotFound",
-  DeleteFailed = "DeleteFailed",
-  Forbidden = "Forbidden",
-}
-
-type deleteQuestionError = {
-  type: deleteQuestionErrorTypes;
-  message: string;
-};
-
 export const deletionRouter = createTRPCRouter({
   chunk: deleteChunkProcedure,
   info: protectedProcedure
@@ -124,22 +112,13 @@ export const deletionRouter = createTRPCRouter({
     }),
   true_false: protectedProcedure
     .input(uuidType)
-    .mutation(async ({ input }): Promise<Result<void, deleteQuestionError>> => {
-      const tIA = await throwIfActive(input);
+    .mutation(async ({ input }): apiType<void> => {
+      const tIA = await validateEditability(input);
       if (tIA.isErr()) {
-        if (tIA.error.type === throwIfActiveErrorTypes.Active) {
-          return err({
-            type: deleteQuestionErrorTypes.Forbidden,
-            message: "You cannot delete an active election!!!",
-          });
-        }
-        return err({
-          type: deleteQuestionErrorTypes.NotFound,
-          message: tIA.error.message,
-        });
+        return err(tIA.error);
       }
 
-      const { data: responseArray, error: responseArrayError } = await tc(
+      const response = await databaseInteraction(
         db
           .select()
           .from(questionTrueFalse)
@@ -150,92 +129,53 @@ export const deletionRouter = createTRPCRouter({
             ),
           ),
       );
-      if (responseArrayError) {
-        console.error(responseArrayError);
-        return err({
-          type: deleteQuestionErrorTypes.DeleteFailed,
-          message: "Failed to delete question",
-        });
+      if (response.isErr()) {
+        return err(response.error);
       }
 
-      const response = responseArray ? responseArray[0] : undefined;
-      if (!response) {
-        return err({
-          type: deleteQuestionErrorTypes.NotFound,
-          message: "Question not found",
-        });
-      }
+      const data = deconstructValue(response).data();
 
-      const delImgResquested = [response.o1Image, response.o2Image];
+      const delImgResquested = [data.o1Image, data.o2Image];
 
       for (const img of delImgResquested) {
         if (img) {
           const dBId = await deleteById(img);
           if (dBId.isErr()) {
-            return err({
-              type: deleteQuestionErrorTypes.DeleteFailed,
-              message: "Failed to delete question image",
-            });
+            return err(dBId.error);
           }
         }
       }
 
-      const { data: delInternalArray, error: dbError2 } = await tc(
+      const delInternal = await databaseInteraction(
         db
           .delete(questionTrueFalse)
-          .where(eq(questionTrueFalse.id, response.id))
+          .where(eq(questionTrueFalse.id, data.id))
           .returning(),
       );
-      if (dbError2) {
-        console.error(dbError2);
-        return err({
-          type: deleteQuestionErrorTypes.DeleteFailed,
-          message: "Failed to delete question",
-        });
+      if (delInternal.isErr()) {
+        return err(delInternal.error);
       }
 
-      const delInternal = delInternalArray ? delInternalArray[0] : undefined;
-      if (!delInternal || !delInternalArray) {
-        return err({
-          type: deleteQuestionErrorTypes.NotFound,
-          message: "Question not found",
-        });
-      }
-
-      const dRQ = await deleteRootQuestion(response.questionId);
+      const dRQ = await deleteRootQuestion(data.questionId);
       if (dRQ.isErr()) {
-        if (dRQ.error.status === deleteRootQuestionErrorTypes.NotFound) {
-          return err({
-            type: deleteQuestionErrorTypes.NotFound,
-            message: dRQ.error.message,
-          });
-        }
-        return err({
-          type: deleteQuestionErrorTypes.DeleteFailed,
-          message: dRQ.error.message,
-        });
+        return err(dRQ.error);
       }
 
-      return ok();
+      return ok({
+        status: apiResponseStatus.Success,
+        type: apiResponseTypes.SuccessNoData,
+        message: "Question deleted successfully",
+      });
     }),
   multiple_choice: protectedProcedure
     .input(uuidType)
-    .mutation(async ({ input }): Promise<Result<void, deleteQuestionError>> => {
-      const tIA = await throwIfActive(input);
+    .mutation(async ({ input }): apiType<void> => {
+      const tIA = await validateEditability(input);
       if (tIA.isErr()) {
-        if (tIA.error.type === throwIfActiveErrorTypes.Active) {
-          return err({
-            type: deleteQuestionErrorTypes.Forbidden,
-            message: "You cannot delete an active election!!!",
-          });
-        }
-        return err({
-          type: deleteQuestionErrorTypes.NotFound,
-          message: tIA.error.message,
-        });
+        return err(tIA.error);
       }
 
-      const { data: responseArray, error: responseArrayError } = await tc(
+      const response = await databaseInteraction(
         db
           .select()
           .from(questionMultipleChoice)
@@ -246,67 +186,45 @@ export const deletionRouter = createTRPCRouter({
             ),
           ),
       );
-      if (responseArrayError) {
-        console.error(responseArrayError);
-        return err({
-          type: deleteQuestionErrorTypes.DeleteFailed,
-          message: "Failed to delete question",
-        });
+      if (response.isErr()) {
+        return err(response.error);
       }
 
-      const response = responseArray ? responseArray[0] : undefined;
-      if (!response) {
-        return err({
-          type: deleteQuestionErrorTypes.NotFound,
-          message: "Question not found",
-        });
-      }
+      const data = deconstructValue(response).data();
 
-      if (response.content) {
-        const delImgResquested = response.content
+      if (data.content) {
+        const delImgResquested = data.content
           .map((item) => item.image)
           .filter(Boolean);
         for (const img of delImgResquested) {
           if (img) {
             const dBId = await deleteById(img);
             if (dBId.isErr()) {
-              return err({
-                type: deleteQuestionErrorTypes.DeleteFailed,
-                message: "Failed to delete question image",
-              });
+              return err(dBId.error);
             }
           }
         }
       }
 
-      const { error: dbError2 } = await tc(
+      const delInternal = await databaseInteraction(
         db
           .delete(questionMultipleChoice)
-          .where(eq(questionMultipleChoice.id, response.id))
+          .where(eq(questionMultipleChoice.id, data.id))
           .returning(),
       );
-      if (dbError2) {
-        console.error(dbError2);
-        return err({
-          type: deleteQuestionErrorTypes.DeleteFailed,
-          message: "Failed to delete question",
-        });
+      if (delInternal.isErr()) {
+        return err(delInternal.error);
       }
 
-      const dRQ = await deleteRootQuestion(response.questionId);
+      const dRQ = await deleteRootQuestion(data.questionId);
       if (dRQ.isErr()) {
-        if (dRQ.error.status === deleteRootQuestionErrorTypes.NotFound) {
-          return err({
-            type: deleteQuestionErrorTypes.NotFound,
-            message: dRQ.error.message,
-          });
-        }
-        return err({
-          type: deleteQuestionErrorTypes.DeleteFailed,
-          message: dRQ.error.message,
-        });
+        return err(dRQ.error);
       }
 
-      return ok();
+      return ok({
+        status: apiResponseStatus.Success,
+        type: apiResponseTypes.SuccessNoData,
+        message: "Question deleted successfully",
+      });
     }),
 });
