@@ -68,4 +68,10 @@ export default withSentryConfig(VercelToolbarConfig, {
   // https://docs.sentry.io/product/crons/
   // https://vercel.com/docs/cron-jobs
   automaticVercelMonitors: true,
+
+  reactComponentAnnotation: {
+    // This is required to ensure that Sentry can automatically instrument React components.
+    // It is recommended to keep this enabled, as it allows Sentry to capture component stack traces.
+    enabled: true,
+  },
 });
