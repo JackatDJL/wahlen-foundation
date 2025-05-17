@@ -56,9 +56,7 @@ export async function deleteRootQuestion(
       .returning(),
     true,
   );
-  if (response.isErr()) {
-    return err(response.error);
-  }
+  if (response.isErr()) return err(response.error);
 
   return response;
 }
@@ -69,9 +67,7 @@ export const deletionRouter = createTRPCRouter({
     .input(uuidType)
     .mutation(async ({ input }): apiType<void> => {
       const tIA = await validateEditability(input);
-      if (tIA.isErr()) {
-        return err(tIA.error);
-      }
+      if (tIA.isErr()) return err(tIA.error);
 
       const response = await databaseInteraction(
         db
@@ -81,9 +77,7 @@ export const deletionRouter = createTRPCRouter({
             or(eq(questionInfo.id, input), eq(questionInfo.questionId, input)),
           ),
       );
-      if (response.isErr()) {
-        return err(response.error);
-      }
+      if (response.isErr()) return err(response.error);
 
       const data = deconstructValue(response).data();
       if (data.image) {
@@ -95,14 +89,10 @@ export const deletionRouter = createTRPCRouter({
       const deleteInternal = await databaseInteraction(
         db.delete(questionInfo).where(eq(questionInfo.id, data.id)).returning(),
       );
-      if (deleteInternal.isErr()) {
-        return err(deleteInternal.error);
-      }
+      if (deleteInternal.isErr()) return err(deleteInternal.error);
 
       const dRQ = await deleteRootQuestion(data.questionId);
-      if (dRQ.isErr()) {
-        return err(dRQ.error);
-      }
+      if (dRQ.isErr()) return err(dRQ.error);
 
       return ok({
         status: apiResponseStatus.Success,
@@ -114,9 +104,7 @@ export const deletionRouter = createTRPCRouter({
     .input(uuidType)
     .mutation(async ({ input }): apiType<void> => {
       const tIA = await validateEditability(input);
-      if (tIA.isErr()) {
-        return err(tIA.error);
-      }
+      if (tIA.isErr()) return err(tIA.error);
 
       const response = await databaseInteraction(
         db
@@ -129,9 +117,7 @@ export const deletionRouter = createTRPCRouter({
             ),
           ),
       );
-      if (response.isErr()) {
-        return err(response.error);
-      }
+      if (response.isErr()) return err(response.error);
 
       const data = deconstructValue(response).data();
 
@@ -140,9 +126,7 @@ export const deletionRouter = createTRPCRouter({
       for (const img of delImgResquested) {
         if (img) {
           const dBId = await deleteById(img);
-          if (dBId.isErr()) {
-            return err(dBId.error);
-          }
+          if (dBId.isErr()) return err(dBId.error);
         }
       }
 
@@ -152,14 +136,10 @@ export const deletionRouter = createTRPCRouter({
           .where(eq(questionTrueFalse.id, data.id))
           .returning(),
       );
-      if (delInternal.isErr()) {
-        return err(delInternal.error);
-      }
+      if (delInternal.isErr()) return err(delInternal.error);
 
       const dRQ = await deleteRootQuestion(data.questionId);
-      if (dRQ.isErr()) {
-        return err(dRQ.error);
-      }
+      if (dRQ.isErr()) return err(dRQ.error);
 
       return ok({
         status: apiResponseStatus.Success,
@@ -171,9 +151,7 @@ export const deletionRouter = createTRPCRouter({
     .input(uuidType)
     .mutation(async ({ input }): apiType<void> => {
       const tIA = await validateEditability(input);
-      if (tIA.isErr()) {
-        return err(tIA.error);
-      }
+      if (tIA.isErr()) return err(tIA.error);
 
       const response = await databaseInteraction(
         db
@@ -186,9 +164,7 @@ export const deletionRouter = createTRPCRouter({
             ),
           ),
       );
-      if (response.isErr()) {
-        return err(response.error);
-      }
+      if (response.isErr()) return err(response.error);
 
       const data = deconstructValue(response).data();
 
@@ -199,9 +175,7 @@ export const deletionRouter = createTRPCRouter({
         for (const img of delImgResquested) {
           if (img) {
             const dBId = await deleteById(img);
-            if (dBId.isErr()) {
-              return err(dBId.error);
-            }
+            if (dBId.isErr()) return err(dBId.error);
           }
         }
       }
@@ -212,14 +186,10 @@ export const deletionRouter = createTRPCRouter({
           .where(eq(questionMultipleChoice.id, data.id))
           .returning(),
       );
-      if (delInternal.isErr()) {
-        return err(delInternal.error);
-      }
+      if (delInternal.isErr()) return err(delInternal.error);
 
       const dRQ = await deleteRootQuestion(data.questionId);
-      if (dRQ.isErr()) {
-        return err(dRQ.error);
-      }
+      if (dRQ.isErr()) return err(dRQ.error);
 
       return ok({
         status: apiResponseStatus.Success,
