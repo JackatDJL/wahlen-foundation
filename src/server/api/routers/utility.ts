@@ -1,5 +1,5 @@
 import { or, eq } from "drizzle-orm";
-import { err, type Ok, ok, type Result } from "neverthrow";
+import { type Err, err, type Ok, ok, type Result } from "neverthrow";
 import { z } from "zod";
 import { tc } from "~/lib/tryCatch";
 import { db } from "~/server/db";
@@ -152,6 +152,10 @@ export type apiResponse<T> =
     };
 
 export type apiType<T> = Promise<Result<apiResponse<T>, apiError>>;
+
+export type apiErr<T> = Promise<Err<apiResponse<T>, apiError>>;
+
+export type apiOk<T> = Promise<Ok<apiResponse<T>, apiError>>;
 
 export enum databaseInteractionTypes {
   Default = "Default",

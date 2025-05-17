@@ -10,8 +10,18 @@ import {
 } from "~/server/db/schema/questions";
 import { deleteById } from "../files";
 import { randomUUID } from "crypto";
-import { err, ok, type Result } from "neverthrow";
-import { tc } from "~/lib/tryCatch";
+import { err, ok } from "neverthrow";
+import {
+  apiErrorStatus,
+  apiErrorTypes,
+  type apiOk,
+  apiResponseStatus,
+  apiResponseTypes,
+  type apiType,
+  databaseInteraction,
+  deconstructValue,
+  orReport,
+} from "../utility";
 
 const editChunkType = z.array(
   z.discriminatedUnion("type", [
@@ -91,274 +101,199 @@ const editChunkType = z.array(
   ]),
 );
 
-type EditChunkReturnType =
+type EditChunkReturnDataTypes = Awaited<
   | typeof questionInfo.$inferSelect
   | typeof questionTrueFalse.$inferSelect
-  | typeof questionMultipleChoice.$inferSelect;
+  | typeof questionMultipleChoice.$inferSelect
+>;
 
-enum EditChunkErrorTypes {
-  NotFound = "NotFound",
-  EditFailed = "EditFailed",
-}
+type EditChunkReturnType = apiOk<EditChunkReturnDataTypes>;
 
-type EditChunkError = {
-  type: EditChunkErrorTypes;
-  message: string;
-};
+type EditChunkResultTypes = apiType<EditChunkReturnDataTypes>;
 
 export const editChunkProcedure = protectedProcedure
   .input(editChunkType)
-  .mutation(
-    async ({
-      input,
-    }): Promise<Result<EditChunkReturnType, EditChunkError>[]> => {
-      const responses: Result<EditChunkReturnType, EditChunkError>[] = [];
+  .mutation(async ({ input }): apiType<Awaited<EditChunkReturnType>[]> => {
+    const results: Awaited<EditChunkResultTypes>[] = [];
 
-      for (const item of input) {
-        switch (item.type) {
-          case "info": {
-            const {
-              data: editInfoResponseArray,
-              error: editInfoResponseError,
-            } = await tc(
-              db
-                .update(questionInfo)
-                .set({
-                  title: item.title,
-                  description: item.description,
-
-                  updatedAt: new Date(),
-                })
-                .where(eq(questionInfo.id, item.id))
-                .returning(),
-            );
-            if (editInfoResponseError) {
-              responses.push(
-                err({
-                  type: EditChunkErrorTypes.EditFailed,
-                  message: "Failed to update info question",
-                }),
-              );
-              continue;
-            }
-
-            const editInfoResponse = editInfoResponseArray
-              ? editInfoResponseArray[0]
-              : null;
-            if (!editInfoResponse) {
-              responses.push(
-                err({
-                  type: EditChunkErrorTypes.NotFound,
-                  message: "Failed to update info question",
-                }),
-              );
-              continue;
-            }
-
-            responses.push(ok(editInfoResponse));
-            break;
-          }
-          case "true_false": {
-            const {
-              data: editTrueFalseResponseArray,
-              error: editTrueFalseResponseError,
-            } = await tc(
-              db
-                .update(questionTrueFalse)
-                .set({
-                  title: item.title,
-                  description: item.description,
-
-                  o1Title: item.content.option1.title,
-                  o1Description: item.content.option1.description,
-                  o1Correct: item.content.option1.correct,
-                  o1Colour: item.content.option1.colour,
-
-                  o2Title: item.content.option2.title,
-                  o2Description: item.content.option2.description,
-                  o2Correct: item.content.option2.correct,
-                  o2Colour: item.content.option2.colour,
-
-                  updatedAt: new Date(),
-                })
-                .where(eq(questionTrueFalse.id, item.id))
-                .returning(),
-            );
-            if (editTrueFalseResponseError) {
-              responses.push(
-                err({
-                  type: EditChunkErrorTypes.EditFailed,
-                  message: "Failed to update true/false question",
-                }),
-              );
-              continue;
-            }
-
-            const editTrueFalseResponse = editTrueFalseResponseArray
-              ? editTrueFalseResponseArray[0]
-              : null;
-            if (!editTrueFalseResponse) {
-              responses.push(
-                err({
-                  type: EditChunkErrorTypes.NotFound,
-                  message: "Failed to update true/false question",
-                }),
-              );
-              continue;
-            }
-
-            responses.push(ok(editTrueFalseResponse));
-            break;
-          }
-          case "multiple_choice": {
-            const {
-              data: editMultipleChoiceContentArray,
-              error: editMultipleChoiceContentError,
-            } = await tc(
-              db
-                .select()
-                .from(questionMultipleChoice)
-                .where(eq(questionMultipleChoice.id, item.id)),
-            );
-            if (editMultipleChoiceContentError) {
-              responses.push(
-                err({
-                  type: EditChunkErrorTypes.EditFailed,
-                  message: "Failed to update multiple choice question",
-                }),
-              );
-              continue;
-            }
-
-            let editMultipleChoiceContent = editMultipleChoiceContentArray
-              ? editMultipleChoiceContentArray[0]?.content
-              : [];
-            if (!editMultipleChoiceContent) {
-              responses.push(
-                err({
-                  type: EditChunkErrorTypes.NotFound,
-                  message: "Failed to get multiple choice question",
-                }),
-              );
-              continue;
-            }
-
-            const { addRequest, editRequest, deleteRequest } =
-              item.content.reduce<{
-                addRequest: Array<
-                  Extract<(typeof item.content)[number], { type: "add" }>
-                >;
-                editRequest: Array<
-                  Extract<(typeof item.content)[number], { type: "edit" }>
-                >;
-                deleteRequest: Array<
-                  Extract<(typeof item.content)[number], { type: "delete" }>
-                >;
-              }>(
-                (acc, item) => {
-                  if (item.type === "add") {
-                    acc.addRequest.push(item);
-                  } else if (item.type === "edit") {
-                    acc.editRequest.push(item);
-                  } else if (item.type === "delete") {
-                    acc.deleteRequest.push(item);
-                  }
-                  return acc;
-                },
-                { addRequest: [], editRequest: [], deleteRequest: [] },
-              );
-
-            for (const item of deleteRequest) {
-              const target = editMultipleChoiceContent.find(
-                (c) => c.id === item.id,
-              );
-              if (target?.image) {
-                const dBId = await deleteById(target.image);
-                if (dBId.isErr()) {
-                  responses.push(
-                    err({
-                      type: EditChunkErrorTypes.EditFailed,
-                      message: "Failed to delete image",
-                    }),
-                  );
-                  continue;
-                }
-              }
-              editMultipleChoiceContent = editMultipleChoiceContent.filter(
-                (c) => c.id !== item.id,
-              );
-            }
-
-            for (const item of editRequest) {
-              editMultipleChoiceContent = editMultipleChoiceContent.map((c) => {
-                if (c.id === item.id) {
-                  return {
-                    ...c,
-                    title: item.title,
-                    description: item.description,
-                    correct: item.correct,
-                    colour: item.colour,
-                  };
-                }
-                return c;
-              });
-            }
-
-            for (const item of addRequest) {
-              editMultipleChoiceContent.push({
-                id: randomUUID(),
+    for (const item of input) {
+      switch (item.type) {
+        case "info": {
+          const editInfoResponse = await databaseInteraction(
+            db
+              .update(questionInfo)
+              .set({
                 title: item.title,
                 description: item.description,
-                correct: item.correct,
-                colour: item.colour,
-              });
-            }
 
-            const {
-              data: editMultipleChoiceResponseArray,
-              error: editMultipleChoiceResponseError,
-            } = await tc(
-              db
-                .update(questionMultipleChoice)
-                .set({
+                updatedAt: new Date(),
+              })
+              .where(eq(questionInfo.id, item.id))
+              .returning(),
+          );
+          if (editInfoResponse.isErr()) {
+            results.push(err(editInfoResponse.error));
+            continue;
+          }
+
+          break;
+        }
+        case "true_false": {
+          const editTrueFalseResponse = await databaseInteraction(
+            db
+              .update(questionTrueFalse)
+              .set({
+                title: item.title,
+                description: item.description,
+
+                o1Title: item.content.option1.title,
+                o1Description: item.content.option1.description,
+                o1Correct: item.content.option1.correct,
+                o1Colour: item.content.option1.colour,
+
+                o2Title: item.content.option2.title,
+                o2Description: item.content.option2.description,
+                o2Correct: item.content.option2.correct,
+                o2Colour: item.content.option2.colour,
+
+                updatedAt: new Date(),
+              })
+              .where(eq(questionTrueFalse.id, item.id))
+              .returning(),
+          );
+          if (editTrueFalseResponse.isErr()) {
+            results.push(err(editTrueFalseResponse.error));
+            continue;
+          }
+
+          break;
+        }
+        case "multiple_choice": {
+          const editMultipleChoiceData = await databaseInteraction(
+            db
+              .select()
+              .from(questionMultipleChoice)
+              .where(eq(questionMultipleChoice.id, item.id)),
+          );
+          if (editMultipleChoiceData.isErr()) {
+            results.push(err(editMultipleChoiceData.error));
+            continue;
+          }
+
+          let multipleChoiceContent =
+            deconstructValue(editMultipleChoiceData).data().content ?? [];
+
+          const { addRequest, editRequest, deleteRequest } =
+            item.content.reduce<{
+              addRequest: Array<
+                Extract<(typeof item.content)[number], { type: "add" }>
+              >;
+              editRequest: Array<
+                Extract<(typeof item.content)[number], { type: "edit" }>
+              >;
+              deleteRequest: Array<
+                Extract<(typeof item.content)[number], { type: "delete" }>
+              >;
+            }>(
+              (acc, item) => {
+                if (item.type === "add") {
+                  acc.addRequest.push(item);
+                } else if (item.type === "edit") {
+                  acc.editRequest.push(item);
+                } else if (item.type === "delete") {
+                  acc.deleteRequest.push(item);
+                }
+                return acc;
+              },
+              { addRequest: [], editRequest: [], deleteRequest: [] },
+            );
+
+          for (const item of deleteRequest) {
+            const target = multipleChoiceContent.find((c) => c.id === item.id);
+            if (target?.image) {
+              const dBId = await deleteById(target.image);
+              if (dBId.isErr()) {
+                results.push(err(dBId.error));
+                continue;
+              }
+            }
+            multipleChoiceContent = multipleChoiceContent.filter(
+              (c) => c.id !== item.id,
+            );
+          }
+
+          for (const item of editRequest) {
+            multipleChoiceContent = multipleChoiceContent.map((c) => {
+              if (c.id === item.id) {
+                return {
+                  ...c,
                   title: item.title,
                   description: item.description,
-                  content: editMultipleChoiceContent,
-
-                  updatedAt: new Date(),
-                })
-                .where(eq(questionMultipleChoice.id, item.id))
-                .returning(),
-            );
-            if (editMultipleChoiceResponseError) {
-              responses.push(
-                err({
-                  type: EditChunkErrorTypes.EditFailed,
-                  message: "Failed to update multiple choice question",
-                }),
-              );
-              continue;
-            }
-
-            const editMultipleChoiceResponse = editMultipleChoiceResponseArray
-              ? editMultipleChoiceResponseArray[0]
-              : null;
-            if (!editMultipleChoiceResponse) {
-              responses.push(
-                err({
-                  type: EditChunkErrorTypes.NotFound,
-                  message: "Failed to update multiple choice question",
-                }),
-              );
-              continue;
-            }
-
-            responses.push(ok(editMultipleChoiceResponse));
-            break;
+                  correct: item.correct,
+                  colour: item.colour,
+                };
+              }
+              return c;
+            });
           }
+
+          for (const item of addRequest) {
+            multipleChoiceContent.push({
+              id: randomUUID(),
+              title: item.title,
+              description: item.description,
+              correct: item.correct,
+              colour: item.colour,
+            });
+          }
+
+          const editMultipleChoiceResponse = await databaseInteraction(
+            db
+              .update(questionMultipleChoice)
+              .set({
+                title: item.title,
+                description: item.description,
+                content: multipleChoiceContent,
+
+                updatedAt: new Date(),
+              })
+              .where(eq(questionMultipleChoice.id, item.id))
+              .returning(),
+          );
+          if (editMultipleChoiceResponse.isErr()) {
+            results.push(err(editMultipleChoiceResponse.error));
+            continue;
+          }
+
+          break;
         }
       }
 
-      return responses;
-    },
-  );
+      results.push(
+        ok({
+          status: apiResponseStatus.Success,
+          type: apiResponseTypes.SuccessNoData,
+          message: `${item.type.toUpperCase()} Question edited successfully`,
+        }),
+      );
+    }
+
+    if (results.every((result) => result.isOk())) {
+      return ok({
+        status: apiResponseStatus.Success,
+        type: apiResponseTypes.Success,
+        message: "Questions deleted successfully",
+        data: results as Awaited<EditChunkReturnType>[], // No need to filter, all is Ok<T>
+      });
+    } else {
+      const failedCount = results.filter((result) => result.isErr()).length;
+      return err({
+        status: apiErrorStatus.Failed,
+        type: apiErrorTypes.Failed,
+        message: `Failed to delete ${failedCount} questions`,
+        error: results
+          .filter((result) => result.isErr())
+          .map((result) => result.error),
+      }).mapErr(orReport);
+    }
+  });
