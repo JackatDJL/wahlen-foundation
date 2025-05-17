@@ -112,7 +112,7 @@ export async function insertableRootQuestion({
       status: apiErrorStatus.ValidationError,
       type: apiErrorTypes.ValidationErrorZod,
       message: "Invalid input",
-      error,
+      validationError: error,
     });
   }
 
@@ -195,7 +195,7 @@ export const creationRouter = createTRPCRouter({
         buildInsertable: (rootQuestion, input) => {
           return {
             id: rootQuestion.id,
-            questionId: rootQuestion.questionId ?? "",
+            questionId: rootQuestion.questionId,
 
             title: input.title,
             description: input.description,
@@ -221,7 +221,7 @@ export const creationRouter = createTRPCRouter({
           buildInsertable: (rootQuestion, input) => {
             return {
               id: rootQuestion.id,
-              questionId: rootQuestion.questionId ?? "",
+              questionId: rootQuestion.questionId,
 
               title: input.title,
               description: input.description,
@@ -263,7 +263,7 @@ export const creationRouter = createTRPCRouter({
           buildInsertable: (rootQuestion, input) => {
             return {
               id: rootQuestion.id,
-              questionId: rootQuestion.questionId ?? "",
+              questionId: rootQuestion.questionId,
 
               title: input.title,
               description: input.description,

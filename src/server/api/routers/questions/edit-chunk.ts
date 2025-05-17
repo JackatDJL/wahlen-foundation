@@ -12,6 +12,7 @@ import { deleteById } from "../files";
 import { randomUUID } from "crypto";
 import { err, ok } from "neverthrow";
 import {
+  type apiError,
   apiErrorStatus,
   apiErrorTypes,
   type apiOk,
@@ -22,6 +23,77 @@ import {
   deconstructValue,
   orReport,
 } from "../utility";
+import { type Result } from "neverthrow";
+
+// Helper function to process multiple choice content updates
+async function processMultipleChoiceContent(
+  currentContent: NonNullable<
+    (typeof questionMultipleChoice.$inferSelect)["content"]
+  >,
+  updates: Extract<
+    z.infer<typeof editChunkType>[number],
+    { type: "multiple_choice" }
+  >["content"],
+): Promise<
+  Result<
+    NonNullable<(typeof questionMultipleChoice.$inferSelect)["content"]>,
+    apiError
+  >
+> {
+  let updatedContent = [...currentContent];
+
+  // Handle deletions first
+  for (const item of updates) {
+    if (item.type === "delete") {
+      const target = updatedContent.find((c) => c.id === item.id);
+      if (target?.image) {
+        const deleteResult = await deleteById(target.image);
+        if (deleteResult.isErr()) {
+          return err({
+            status: apiErrorStatus.Failed,
+            type: apiErrorTypes.Failed,
+            message: "Failed to delete image",
+            error: deleteResult.error,
+          });
+        }
+      }
+      updatedContent = updatedContent.filter((c) => c.id !== item.id);
+    }
+  }
+
+  // Handle edits
+  for (const item of updates) {
+    if (item.type === "edit") {
+      updatedContent = updatedContent.map((c) => {
+        if (c.id === item.id) {
+          return {
+            ...c,
+            title: item.title,
+            description: item.description,
+            correct: item.correct,
+            colour: item.colour,
+          };
+        }
+        return c;
+      });
+    }
+  }
+
+  // Handle additions
+  for (const item of updates) {
+    if (item.type === "add") {
+      updatedContent.push({
+        id: randomUUID(),
+        title: item.title,
+        description: item.description,
+        correct: item.correct,
+        colour: item.colour,
+      });
+    }
+  }
+
+  return ok(updatedContent);
+}
 
 const editChunkType = z.array(
   z.discriminatedUnion("type", [
@@ -180,71 +252,15 @@ export const editChunkProcedure = protectedProcedure
             continue;
           }
 
-          let multipleChoiceContent =
-            deconstructValue(editMultipleChoiceData).data().content ?? [];
+          const currentData = deconstructValue(editMultipleChoiceData).data();
+          const processResult = await processMultipleChoiceContent(
+            currentData.content ?? [],
+            item.content,
+          );
 
-          const { addRequest, editRequest, deleteRequest } =
-            item.content.reduce<{
-              addRequest: Array<
-                Extract<(typeof item.content)[number], { type: "add" }>
-              >;
-              editRequest: Array<
-                Extract<(typeof item.content)[number], { type: "edit" }>
-              >;
-              deleteRequest: Array<
-                Extract<(typeof item.content)[number], { type: "delete" }>
-              >;
-            }>(
-              (acc, item) => {
-                if (item.type === "add") {
-                  acc.addRequest.push(item);
-                } else if (item.type === "edit") {
-                  acc.editRequest.push(item);
-                } else if (item.type === "delete") {
-                  acc.deleteRequest.push(item);
-                }
-                return acc;
-              },
-              { addRequest: [], editRequest: [], deleteRequest: [] },
-            );
-
-          for (const item of deleteRequest) {
-            const target = multipleChoiceContent.find((c) => c.id === item.id);
-            if (target?.image) {
-              const dBId = await deleteById(target.image);
-              if (dBId.isErr()) {
-                results.push(err(dBId.error));
-                continue;
-              }
-            }
-            multipleChoiceContent = multipleChoiceContent.filter(
-              (c) => c.id !== item.id,
-            );
-          }
-
-          for (const item of editRequest) {
-            multipleChoiceContent = multipleChoiceContent.map((c) => {
-              if (c.id === item.id) {
-                return {
-                  ...c,
-                  title: item.title,
-                  description: item.description,
-                  correct: item.correct,
-                  colour: item.colour,
-                };
-              }
-              return c;
-            });
-          }
-
-          for (const item of addRequest) {
-            multipleChoiceContent.push({
-              id: randomUUID(),
-              title: item.title,
-              description: item.description,
-              correct: item.correct,
-              colour: item.colour,
-            });
+          if (processResult.isErr()) {
+            results.push(err(processResult.error));
+            continue;
           }
 
           const editMultipleChoiceResponse = await databaseInteraction(
@@ -253,8 +269,7 @@ export const editChunkProcedure = protectedProcedure
               .set({
                 title: item.title,
                 description: item.description,
-                content: multipleChoiceContent,
-
+                content: processResult.value,
                 updatedAt: new Date(),
               })
               .where(eq(questionMultipleChoice.id, item.id))
@@ -282,7 +297,7 @@ export const editChunkProcedure = protectedProcedure
       return ok({
         status: apiResponseStatus.Success,
         type: apiResponseTypes.Success,
-        message: "Questions deleted successfully",
+        message: "Questions edit successfully",
         data: results as Awaited<EditChunkReturnType>[], // No need to filter, all is Ok<T>
       });
     } else {

@@ -53,12 +53,12 @@ export const deleteChunkProcedure = protectedProcedure
       const data = deconstructValue(question).data();
 
       switch (data.type) {
-        case "info":
+        case "info": {
           const infoRequest = await databaseInteraction(
             db
               .select()
               .from(questionInfo)
-              .where(eq(questionInfo.id, data.questionId!)),
+              .where(eq(questionInfo.id, data.questionId)),
           );
           if (infoRequest.isErr()) {
             results.push(err(infoRequest.error));
@@ -78,7 +78,7 @@ export const deleteChunkProcedure = protectedProcedure
           const deleteInfo = await databaseInteraction(
             db
               .delete(questionInfo)
-              .where(eq(questionInfo.id, data.questionId!))
+              .where(eq(questionInfo.id, data.questionId))
               .returning(),
           );
           if (deleteInfo.isErr()) {
@@ -86,12 +86,13 @@ export const deleteChunkProcedure = protectedProcedure
             continue;
           }
           break;
-        case "true_false":
+        }
+        case "true_false": {
           const trueFalseRequest = await databaseInteraction(
             db
               .select()
               .from(questionTrueFalse)
-              .where(eq(questionTrueFalse.id, data.questionId!)),
+              .where(eq(questionTrueFalse.id, data.questionId)),
           );
           if (trueFalseRequest.isErr()) {
             results.push(err(trueFalseRequest.error));
@@ -115,7 +116,7 @@ export const deleteChunkProcedure = protectedProcedure
           const deleteTrueFalse = await databaseInteraction(
             db
               .delete(questionTrueFalse)
-              .where(eq(questionTrueFalse.id, data.questionId!))
+              .where(eq(questionTrueFalse.id, data.questionId))
               .returning(),
           );
           if (deleteTrueFalse.isErr()) {
@@ -124,12 +125,13 @@ export const deleteChunkProcedure = protectedProcedure
           }
 
           break;
-        case "multiple_choice":
+        }
+        case "multiple_choice": {
           const multipleChoiceRequest = await databaseInteraction(
             db
               .select()
               .from(questionMultipleChoice)
-              .where(eq(questionMultipleChoice.id, data.questionId!)),
+              .where(eq(questionMultipleChoice.id, data.questionId)),
           );
           if (multipleChoiceRequest.isErr()) {
             results.push(err(multipleChoiceRequest.error));
@@ -156,7 +158,7 @@ export const deleteChunkProcedure = protectedProcedure
           const deleteMultipleChoice = await databaseInteraction(
             db
               .delete(questionMultipleChoice)
-              .where(eq(questionMultipleChoice.id, data.questionId!))
+              .where(eq(questionMultipleChoice.id, data.questionId))
               .returning(),
           );
           if (deleteMultipleChoice.isErr()) {
@@ -164,8 +166,9 @@ export const deleteChunkProcedure = protectedProcedure
             continue;
           }
           break;
+        }
       }
-      const dRQ = await deleteRootQuestion(data.questionId!);
+      const dRQ = await deleteRootQuestion(data.questionId);
       if (dRQ.isErr()) {
         results.push(err(dRQ.error));
         continue;
