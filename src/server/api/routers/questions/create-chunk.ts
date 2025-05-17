@@ -103,7 +103,7 @@ export const chunkProcedure = protectedProcedure
               buildInsertable: (rootQuestion, input) => {
                 return {
                   id: rootQuestion.id,
-                  questionId: rootQuestion.questionId ?? "",
+                  questionId: rootQuestion.questionId,
 
                   title: input.title,
                   description: input.description,
@@ -131,7 +131,7 @@ export const chunkProcedure = protectedProcedure
               buildInsertable: (rootQuestion, input) => {
                 return {
                   id: rootQuestion.id,
-                  questionId: rootQuestion.questionId ?? "",
+                  questionId: rootQuestion.questionId,
 
                   title: input.title,
                   description: input.description,
@@ -171,7 +171,7 @@ export const chunkProcedure = protectedProcedure
               buildInsertable: (rootQuestion, input) => {
                 return {
                   id: rootQuestion.id,
-                  questionId: rootQuestion.questionId ?? "",
+                  questionId: rootQuestion.questionId,
 
                   title: input.title,
                   description: input.description,
