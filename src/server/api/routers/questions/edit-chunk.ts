@@ -290,7 +290,7 @@ export const editChunkProcedure = protectedProcedure
       return err({
         status: apiErrorStatus.Failed,
         type: apiErrorTypes.Failed,
-        message: `Failed to delete ${failedCount} questions`,
+        message: `Failed to edit ${failedCount} questions`,
         error: results
           .filter((result) => result.isErr())
           .map((result) => result.error),
