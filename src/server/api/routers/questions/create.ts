@@ -10,11 +10,17 @@ import {
   questionTrueFalse,
 } from "~/server/db/schema/questions";
 import { chunkProcedure } from "./create-chunk";
-import { throwIfActive } from "./delete";
-import { err, ok, type Result } from "neverthrow";
-import { tc } from "~/lib/tryCatch";
+import { err, ok } from "neverthrow";
+import {
+  apiErrorStatus,
+  apiErrorTypes,
+  type apiType,
+  databaseInteraction,
+  deconstructValue,
+  uuidType,
+  validateEditability,
+} from "../utility";
 
-const uuidType = z.string().uuid();
 /**
  * Creates a question record of a specified type and inserts it into the database.
  *
@@ -26,7 +32,11 @@ const uuidType = z.string().uuid();
  * @param table - An interface for the database table exposing an `insert` method with a `returning` function to persist and retrieve the inserted record.
  * @returns A promise resolving to a Result containing the inserted question record or an error of type createError.
  */
-async function createQuestion<TTable, TInput, TOutput>({
+export async function createQuestion<
+  TTable,
+  TInput extends { wahlId: string },
+  TOutput,
+>({
   input,
   questionType,
   buildInsertable,
@@ -41,79 +51,37 @@ async function createQuestion<TTable, TInput, TOutput>({
   table: {
     insert: (values: TTable) => { returning: () => Promise<TOutput[]> };
   };
-}): Promise<Result<TOutput, createError>> {
+}): apiType<TOutput> {
   // Get wahlId from input (all input types have wahlId)
-  const wahlId = (input as unknown as { wahlId: string }).wahlId;
+  const wahlId = input.wahlId;
 
   // Check if Wahl is active
-  const tIA = await throwIfActive(wahlId);
-  if (tIA.isErr()) {
-    return err({
-      type: createErrorTypes.Disallowed,
-      message: "Wahl is active",
-    });
-  }
+  const tIA = await validateEditability(wahlId);
+  if (tIA.isErr()) return err(tIA.error);
 
   // Create root question
   const iRQ = await insertableRootQuestion({
     wahlId,
     type: questionType,
   });
-  if (iRQ.isErr()) {
-    return err({
-      type: createErrorTypes.Failed,
-      message: "Failed to create question",
-    });
-  }
+  if (iRQ.isErr()) return err(iRQ.error);
 
   // Build insertable object specific to question type
-  const insertable = buildInsertable(iRQ.value, input);
+  const insertable = buildInsertable(deconstructValue(iRQ).data(), input);
 
   // Insert into database
-  const { data: insertedArray, error: insertError } = await tc(
+  const response = await databaseInteraction(
     table.insert(insertable).returning(),
   );
-  if (insertError) {
-    return err({
-      type: createErrorTypes.Failed,
-      message: "Failed to insert question",
-    });
-  }
+  if (response.isErr()) return err(response.error);
 
-  // Check if insertion was successful
-  const inserted = insertedArray ? insertedArray[0] : null;
-  if (!inserted) {
-    return err({
-      type: createErrorTypes.NotFound,
-      message: "Failed to insert question",
-    });
-  }
-
-  return ok(inserted);
+  return ok(deconstructValue(response));
 }
 
 const IRQType = z.object({
   wahlId: uuidType,
   type: z.enum(["info", "true_false", "multiple_choice"]),
 });
-
-enum IRQErrorTypes {
-  InputTypeError = "InputTypeError",
-  NotFound = "NotFound",
-  Disallowed = "Disallowed",
-  Failed = "Failed",
-}
-
-type IRQError =
-  | {
-      type: Exclude<IRQErrorTypes, IRQErrorTypes.InputTypeError>;
-      message: string;
-    }
-  | {
-      type: IRQErrorTypes.InputTypeError;
-      message: string;
-      error: z.ZodError;
-    };
 
 /**
  * Inserts a new root question record into the database.
@@ -131,24 +99,18 @@ type IRQError =
 export async function insertableRootQuestion({
   wahlId,
   type,
-}: z.infer<typeof IRQType>): Promise<
-  Result<typeof questions.$inferSelect, IRQError>
-> {
-  const tIA = await throwIfActive(wahlId);
-  if (tIA.isErr()) {
-    return err({
-      type: IRQErrorTypes.Disallowed,
-      message: "Wahl is active",
-    });
-  }
+}: z.infer<typeof IRQType>): apiType<typeof questions.$inferSelect> {
+  const tIA = await validateEditability(wahlId);
+  if (tIA.isErr()) return err(tIA.error);
 
-  const { success, error } = IRQType.safeParse({
+  const error = IRQType.safeParse({
     wahlId,
     type,
-  });
-  if (!success) {
+  }).error;
+  if (error) {
     return err({
-      type: IRQErrorTypes.InputTypeError,
+      status: apiErrorStatus.ValidationError,
+      type: apiErrorTypes.ValidationErrorZod,
       message: "Invalid input",
       error,
     });
@@ -166,37 +128,13 @@ export async function insertableRootQuestion({
     updatedAt: new Date(),
   };
 
-  const { data: insertedArray, error: insertError } = await tc(
+  const response = await databaseInteraction(
     db.insert(questions).values(insertable).returning(),
   );
-  if (insertError) {
-    return err({
-      type: IRQErrorTypes.Failed,
-      message: "Failed to insert question",
-    });
-  }
+  if (response.isErr()) return err(response.error);
 
-  const inserted = insertedArray ? insertedArray[0] : null;
-  if (!inserted) {
-    return err({
-      type: IRQErrorTypes.NotFound,
-      message: "Failed to insert question",
-    });
-  }
-
-  return ok(inserted);
+  return ok(deconstructValue(response));
 }
-
-enum createErrorTypes {
-  NotFound = "NotFound",
-  Failed = "Failed",
-  Disallowed = "Disallowed",
-}
-
-type createError = {
-  type: createErrorTypes;
-  message: string;
-};
 
 const createInfoQuestionType = z.object({
   wahlId: z.string().uuid(),
@@ -250,64 +188,59 @@ export const creationRouter = createTRPCRouter({
   chunk: chunkProcedure,
   info: protectedProcedure
     .input(createInfoQuestionType)
-    .mutation(
-      async ({
+    .mutation(async ({ input }): apiType<typeof questionInfo.$inferSelect> => {
+      return createQuestion({
         input,
-      }): Promise<Result<typeof questionInfo.$inferSelect, createError>> => {
-        return createQuestion({
-          input,
-          questionType: "info",
-          buildInsertable: (rootQuestion, input) => {
-            const insertable: typeof questionInfo.$inferInsert = {
-              id: rootQuestion.id,
-              questionId: rootQuestion.questionId ?? "",
-              title: input.title,
-              description: input.description,
-              createdAt: new Date(),
-              updatedAt: new Date(),
-            };
-            return insertable;
-          },
-          table: {
-            insert: (values) => ({
-              returning: () =>
-                db.insert(questionInfo).values(values).returning(),
-            }),
-          },
-        });
-      },
-    ),
+        questionType: "info",
+        buildInsertable: (rootQuestion, input) => {
+          return {
+            id: rootQuestion.id,
+            questionId: rootQuestion.questionId ?? "",
+
+            title: input.title,
+            description: input.description,
+
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          } as typeof questionInfo.$inferInsert;
+        },
+        table: {
+          insert: (values) => ({
+            returning: () => db.insert(questionInfo).values(values).returning(),
+          }),
+        },
+      });
+    }),
   true_false: protectedProcedure
     .input(createTrueFalseQuestionType)
     .mutation(
-      async ({
-        input,
-      }): Promise<
-        Result<typeof questionTrueFalse.$inferSelect, createError>
-      > => {
+      async ({ input }): apiType<typeof questionTrueFalse.$inferSelect> => {
         return createQuestion({
           input,
           questionType: "true_false",
           buildInsertable: (rootQuestion, input) => {
-            const insertable: typeof questionTrueFalse.$inferInsert = {
+            return {
               id: rootQuestion.id,
               questionId: rootQuestion.questionId ?? "",
+
               title: input.title,
               description: input.description,
+
               o1Id: randomUUID(),
               o1Title: input.content.option1.title,
               o1Description: input.content.option1.description,
               o1Correct: input.content.option1.correct,
               o1Colour: input.content.option1.colour,
+
               o2Id: randomUUID(),
               o2Title: input.content.option2.title,
               o2Description: input.content.option2.description,
               o2Correct: input.content.option2.correct,
               o2Colour: input.content.option2.colour,
+
               createdAt: new Date(),
               updatedAt: new Date(),
-            };
-            return insertable;
+            } as typeof questionTrueFalse.$inferInsert;
           },
           table: {
             insert: (values) => ({
@@ -323,18 +256,18 @@ export const creationRouter = createTRPCRouter({
     .mutation(
       async ({
         input,
-      }): Promise<
-        Result<typeof questionMultipleChoice.$inferSelect, createError>
-      > => {
+      }): apiType<typeof questionMultipleChoice.$inferSelect> => {
         return createQuestion({
           input,
           questionType: "multiple_choice",
           buildInsertable: (rootQuestion, input) => {
-            const insertable: typeof questionMultipleChoice.$inferInsert = {
+            return {
               id: rootQuestion.id,
               questionId: rootQuestion.questionId ?? "",
+
               title: input.title,
               description: input.description,
+
               content: input.content.map((item) => ({
                 id: randomUUID(),
                 title: item.title,
@@ -342,10 +275,10 @@ export const creationRouter = createTRPCRouter({
                 correct: item.correct,
                 colour: item.colour,
               })),
+
               createdAt: new Date(),
               updatedAt: new Date(),
-            };
-            return insertable;
+            } as typeof questionMultipleChoice.$inferInsert;
           },
           table: {
             insert: (values) => ({
