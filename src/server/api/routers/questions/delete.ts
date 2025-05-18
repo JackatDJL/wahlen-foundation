@@ -18,7 +18,7 @@ import {
   apiResponseTypes,
   apiResponseStatus,
   type apiType,
-  deconstructValue,
+  deconstruct,
   databaseInteraction,
   uuidType,
   validateEditability,
@@ -79,7 +79,7 @@ export const deletionRouter = createTRPCRouter({
       );
       if (response.isErr()) return err(response.error);
 
-      const data = deconstructValue(response).data();
+      const data = deconstruct(response).data();
       if (data.image) {
         const dBId = await deleteById(data.image);
         if (dBId.isErr()) {
@@ -119,7 +119,7 @@ export const deletionRouter = createTRPCRouter({
       );
       if (response.isErr()) return err(response.error);
 
-      const data = deconstructValue(response).data();
+      const data = deconstruct(response).data();
 
       const delImgResquested = [data.o1Image, data.o2Image];
 
@@ -166,7 +166,7 @@ export const deletionRouter = createTRPCRouter({
       );
       if (response.isErr()) return err(response.error);
 
-      const data = deconstructValue(response).data();
+      const data = deconstruct(response).data();
 
       if (data.content) {
         const delImgResquested = data.content

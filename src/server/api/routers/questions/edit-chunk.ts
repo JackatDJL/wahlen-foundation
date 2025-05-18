@@ -20,7 +20,7 @@ import {
   apiResponseTypes,
   type apiType,
   databaseInteraction,
-  deconstructValue,
+  deconstruct,
   orReport,
 } from "../utility";
 import { type Result } from "neverthrow";
@@ -252,7 +252,7 @@ export const editChunkProcedure = protectedProcedure
             continue;
           }
 
-          const currentData = deconstructValue(editMultipleChoiceData).data();
+          const currentData = deconstruct(editMultipleChoiceData).data();
           const processResult = await processMultipleChoiceContent(
             currentData.content ?? [],
             item.content,

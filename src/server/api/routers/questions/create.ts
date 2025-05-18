@@ -16,7 +16,7 @@ import {
   apiErrorTypes,
   type apiType,
   databaseInteraction,
-  deconstructValue,
+  deconstruct,
   uuidType,
   validateEditability,
 } from "../utility";
@@ -67,7 +67,7 @@ export async function createQuestion<
   if (iRQ.isErr()) return err(iRQ.error);
 
   // Build insertable object specific to question type
-  const insertable = buildInsertable(deconstructValue(iRQ).data(), input);
+  const insertable = buildInsertable(deconstruct(iRQ).data(), input);
 
   // Insert into database
   const response = await databaseInteraction(
@@ -75,7 +75,7 @@ export async function createQuestion<
   );
   if (response.isErr()) return err(response.error);
 
-  return ok(deconstructValue(response));
+  return ok(deconstruct(response));
 }
 
 const IRQType = z.object({
@@ -133,7 +133,7 @@ export async function insertableRootQuestion({
   );
   if (response.isErr()) return err(response.error);
 
-  return ok(deconstructValue(response));
+  return ok(deconstruct(response));
 }
 
 const createInfoQuestionType = z.object({
