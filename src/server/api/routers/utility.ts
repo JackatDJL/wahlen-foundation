@@ -1,3 +1,6 @@
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// WIP_LINT: DISABLE THIS
 import { or, eq } from "drizzle-orm";
 import { type Err, err, type Ok, ok, type Result } from "neverthrow";
 import { z } from "zod";
@@ -69,7 +72,11 @@ export type apiError =
       status: apiErrorStatus.ValidationError;
       type: apiErrorTypes.ValidationErrorZod;
       message: string;
-      validationError: z.ZodError;
+      error: z.ZodError;
+      _internal: {
+        reported: false;
+        reportable: false;
+      };
     }
   | {
       status: apiErrorStatus.BadRequest;
@@ -80,23 +87,40 @@ export type apiError =
         | apiErrorTypes.BadRequestUnknown;
       message: string;
       error: unknown;
+      _internal: {
+        reported: boolean;
+        reportable: true;
+      };
     }
   | {
       status: apiErrorStatus.NotFound;
-      type?: apiErrorTypes.NotFound;
+      type: apiErrorTypes.NotFound;
       message: string;
+      error: null;
+      _internal: {
+        reported: false;
+        reportable: false;
+      };
     }
   | {
       status: apiErrorStatus.Failed;
-      type?: apiErrorTypes.FailedUnknown | apiErrorTypes.Failed;
+      type: apiErrorTypes.FailedUnknown | apiErrorTypes.Failed;
       message: string;
       error?: unknown;
+      _internal: {
+        reported: boolean;
+        reportable: true;
+      };
     }
   | {
       status: apiErrorStatus;
       type: apiErrorTypes;
       message: string;
       error?: unknown;
+      _internal: {
+        reported: boolean;
+        reportable: boolean;
+      };
     };
 
 export enum apiResponseStatus {
@@ -122,6 +146,8 @@ export enum apiResponseTypes {
 
   Inconsequential = "Inconsequential",
 }
+
+// TODO: Neue idee, auch ein _intenal für apiResponse mit auto maping und dass alle apiResponses auch gelogt werden in postgress oder sentry
 export type apiResponse<T> =
   | {
       status: apiResponseStatus.Inconsequential;
@@ -162,25 +188,393 @@ export enum databaseInteractionTypes {
   Sequencial = "Sequencial",
 }
 
-export function deconstructValue<T>(
-  neverthrowOk: Ok<apiResponse<T>, apiError>,
-): apiResponse<T> & { data(): T } {
+export function deconstruct<T>(
+  input: Awaited<apiOk<T> | apiErr<T>>,
+):
+  | (apiResponse<T> & { content(): T })
+  | (apiError & { content(): apiError["error"] }) {
+  if (input.isErr()) {
+    return {
+      ...input.error,
+      content: () => input.error.error,
+    };
+  }
   return {
-    ...neverthrowOk.value,
-    data: () => neverthrowOk.value.data as T,
-  } as apiResponse<T> & { data(): T };
+    ...input.value,
+    content: () => input.value.data as T,
+  };
+}
+
+export async function passBack<T>(
+  input: Awaited<apiOk<T> | apiErr<T>>,
+): apiType<T> {
+  if (input.isErr()) {
+    return err(input.error);
+  }
+  return ok(input.value);
 }
 
 export function reportError(error: apiError): apiError {
+  if (!error._internal.reportable) return error;
+  if (error._internal.reported) return error;
+
   console.error(error);
 
   Sentry.captureException(error);
   posthog.captureException(error);
-  return error;
+
+  return {
+    ...error,
+    _internal: {
+      ...error._internal,
+      reported: true,
+    },
+  };
 }
 
 // alias for return err({}: apiError).mapErr(orReport)
 export const orReport = reportError;
+
+function generateTypeMappings<
+  StatusEnum extends Record<string, string>,
+  TypesEnum extends Record<string, string>,
+>(
+  statusEnum: StatusEnum,
+  typesEnum: TypesEnum,
+): Partial<Record<StatusEnum[keyof StatusEnum], TypesEnum[keyof TypesEnum][]>> {
+  const mappings: Record<string, string[]> = {};
+
+  const statusValues = Object.values(statusEnum);
+  const typeValues = Object.values(typesEnum);
+
+  for (const status of statusValues) {
+    mappings[status] = [];
+    for (const type of typeValues) {
+      // Check if the type name starts with the status name or is exactly the status name
+      if (
+        type.startsWith(status) &&
+        (type === status || type.charAt(status.length) === ".")
+      ) {
+        mappings[status].push(type);
+      }
+    }
+  }
+  return mappings as Partial<
+    Record<StatusEnum[keyof StatusEnum], TypesEnum[keyof TypesEnum][]>
+  >;
+}
+
+const responseMappings = generateTypeMappings(
+  apiResponseStatus,
+  apiResponseTypes,
+);
+
+const errorMappings = generateTypeMappings(apiErrorStatus, apiErrorTypes);
+
+type OkInitialChain<T> = {
+  [K in keyof typeof apiResponseStatus]: () => OkStatusChain<
+    T,
+    (typeof apiResponseStatus)[K]
+  >;
+};
+
+type OkStatusChain<T, Status extends apiResponseStatus> = {
+  message(msg: string): OkStatusChain<T, Status>;
+  data(data: T): OkStatusChain<T, Status>;
+  build(): Awaited<apiOk<T>>;
+} & {
+  [K in apiResponseTypes as K extends `${Status}.${infer Rest}`
+    ? Rest
+    : K]: () => OkFinalizeChain<T, Status, K>;
+} & {
+  [K in apiResponseTypes as K extends Status
+    ? K
+    : never]: () => OkFinalizeChain<T, Status, K>;
+};
+
+interface OkFinalizeChain<
+  T,
+  Status extends apiResponseStatus,
+  Type extends apiResponseTypes,
+> {
+  message(msg: string): OkFinalizeChain<T, Status, Type>;
+  data(data: T): OkFinalizeChain<T, Status, Type>;
+  build(): Awaited<apiOk<T>>;
+}
+
+type OkFunctionInput<T> = (
+  s: typeof apiResponseStatus,
+  t: typeof apiResponseTypes,
+) => {
+  status: apiResponseStatus;
+  type?: apiResponseTypes;
+  message?: string;
+  data?: T;
+};
+
+class OkBuilder<T>
+  implements
+    OkInitialChain<T>,
+    OkStatusChain<T, any>,
+    OkFinalizeChain<T, any, any>
+{
+  private status?: apiResponseStatus;
+  private type?: apiResponseTypes;
+  private _message?: string;
+  private _data?: T;
+  private functionInputProvided: boolean;
+
+  constructor(input?: OkFunctionInput<T>) {
+    this.functionInputProvided = input !== undefined;
+
+    // Add all response type methods to this instance
+    for (const type of Object.values(apiResponseTypes)) {
+      const methodName = type.split(".").pop()!;
+      const simpleMethodName =
+        String(type) === String(this.status) ? type : methodName;
+      (this as any)[simpleMethodName] = () => {
+        this.type = type;
+        return this;
+      };
+    }
+
+    if (!this.functionInputProvided) {
+      for (const status of Object.values(apiResponseStatus)) {
+        (this as any)[status] = () => {
+          this.status = status;
+          this.addChainableMethods();
+          return this;
+        };
+      }
+    } else {
+      const result = input!(apiResponseStatus, apiResponseTypes);
+      this.status = result.status;
+      this.type = result.type;
+      this._message = result.message;
+      this._data = result.data;
+    }
+  }
+
+  private addChainableMethods(): void {
+    (this as any)._message = this._message;
+    (this as any)._data = this._data;
+    (this as any).build = this.build.bind(this);
+
+    // Remove all previous type methods
+    for (const type of Object.values(apiResponseTypes)) {
+      const methodName = type.split(".").pop()!;
+      const simpleMethodName =
+        String(type) === String(this.status) ? type : methodName;
+      delete (this as any)[simpleMethodName];
+    }
+
+    // Add only the relevant type methods for the current status
+    const types = this.status ? (responseMappings[this.status] ?? []) : [];
+
+    for (const type of types) {
+      const methodName = type.split(".").pop()!;
+      const simpleMethodName =
+        String(type) === String(this.status) ? type : methodName;
+
+      (this as any)[simpleMethodName] = () => {
+        this.type = type;
+        return this;
+      };
+    }
+  }
+
+  message(msg: string): OkStatusChain<T, any> {
+    if (this.functionInputProvided) {
+      // TODO: TYPEERROR
+      return this as unknown as OkStatusChain<T, any>;
+    }
+    this._message = msg;
+    return this;
+  }
+
+  data(data: T): OkStatusChain<T, any> {
+    if (this.functionInputProvided) {
+      return this as unknown as OkStatusChain<T,any>;
+    }
+    this._data = data;
+    return this as unknown as OkStatusChain<T,any>;
+  }
+
+  build(): Awaited<apiOk<T>> {
+    const response = {
+      status: this.status ?? apiResponseStatus.Inconsequential,
+      type: this.type,
+      message: this._message,
+      data: this._data,
+    } as apiResponse<T>; // KEEP THIS THIS SOMEHOW WORKS!!!!!!
+
+    return ok(response);
+  }
+}
+
+type ErrInitialChain = {
+  [K in keyof typeof apiErrorStatus]: () => ErrStatusChain<
+    (typeof apiErrorStatus)[K]
+  >;
+};
+
+type ErrStatusChain<Status extends apiErrorStatus> = {
+  message(msg: string): ErrStatusChain<Status>;
+  error(err: unknown): ErrStatusChain<Status>;
+  build(): Awaited<apiError>;
+} & {
+  [K in apiErrorTypes as K extends `${Status}.${infer Rest}`
+    ? Rest
+    : K]: () => ErrFinalizeChain<Status, K>;
+} & {
+  [K in apiErrorTypes as K extends Status ? K : never]: () => ErrFinalizeChain<
+    Status,
+    K
+  >;
+};
+
+interface ErrFinalizeChain<
+  Status extends apiErrorStatus,
+  Type extends apiErrorTypes,
+> {
+  message(msg: string): ErrFinalizeChain<Status, Type>;
+  error(err: unknown): ErrFinalizeChain<Status, Type>;
+  build(): Result<any, apiError>; // Synchronous build, returns Result
+}
+
+type ErrFunctionInput = (
+  s: typeof apiErrorStatus,
+  t: typeof apiErrorTypes,
+) => {
+  status: apiErrorStatus;
+  type: apiErrorTypes;
+  message: string;
+  error?: unknown;
+};
+
+class ErrBuilder
+  implements ErrInitialChain, ErrStatusChain<any>, ErrFinalizeChain<any, any>
+{
+  private status?: apiErrorStatus;
+  private type?: apiErrorTypes;
+  private _message?: string;
+  private _error?: unknown;
+  private _internal: apiError["_internal"] = {
+    reported: false,
+    reportable: true,
+  };
+  private functionInputProvided: boolean;
+
+  constructor(input?: ErrFunctionInput) {
+    this.functionInputProvided = input !== undefined;
+
+    for (const type of Object.values(apiErrorTypes)) {
+      const methodName = type.split(".").pop()!;
+      const simpleMethodName =
+        String(type) === String(this.status) ? type : methodName;
+      (this as any)[simpleMethodName] = () => {
+        this.type = type;
+        return this;
+      };
+    }
+
+    if (!this.functionInputProvided) {
+      for (const status of Object.values(apiErrorStatus)) {
+        (this as any)[status] = () => {
+          this.status = status;
+          this.updateInternal();
+          this.addChainableMethods();
+          return this;
+        };
+      }
+    } else {
+      const result = input!(apiErrorStatus, apiErrorTypes);
+      this.status = result.status;
+      this.type = result.type;
+      this._message = result.message;
+      this._error = result.error;
+      this.updateInternal();
+    }
+  }
+
+  private addChainableMethods(): void {
+    (this as any).message = (msg: string) => {
+      this._message = msg;
+      return this;
+    };
+    (this as any).error = (err: unknown) => {
+      this._error = err;
+      return this;
+    };
+    (this as any).build = this.build.bind(this);
+
+    for (const type of Object.values(apiErrorTypes)) {
+      const methodName = type.split(".").pop()!;
+      const simpleMethodName =
+        String(type) === String(this.status) ? type : methodName;
+      delete (this as any)[simpleMethodName];
+    }
+
+    const types = this.status ? (errorMappings[this.status] ?? []) : [];
+
+    for (const type of types) {
+      const methodName = type.split(".").pop()!;
+      const simpleMethodName = type === this.status ? type : methodName;
+
+      (this as any)[simpleMethodName] = () => {
+        this.type = type;
+        this.updateInternal();
+        return this;
+      };
+    }
+  }
+
+  message(msg: string): ErrStatusChain<any> {
+    if (this.functionInputProvided) {
+      // TODO: TYPEERROR
+      return this as unknown as ErrStatusChain<any>;
+    }
+    this._message = msg;
+    return this as unknown as ErrStatusChain<any>;
+  }
+
+  error(err: unknown): ErrStatusChain<any> {
+    if (this.functionInputProvided) {
+      // TODO: TYPEERROR
+      return this as unknown as ErrStatusChain<any>>;
+    }
+    this._error = err;
+    return this as unknown as ErrStatusChain<any>;
+  }
+
+  private updateInternal(): void {
+    if (
+      this.status === apiErrorStatus.ValidationError &&
+      this.type === apiErrorTypes.ValidationErrorZod
+    ) {
+      this._internal.reportable = false;
+    } else if (
+      this.status === apiErrorStatus.NotFound &&
+      this.type === apiErrorTypes.NotFound
+    ) {
+      this._internal.reportable = false;
+    } else {
+      this._internal.reportable = true; // Default for most errors
+    }
+  }
+
+  build(): Result<any, apiError> {
+    const response = {
+      status: this.status,
+      type: this.type,
+      message: this.message || "An error occurred",
+      error: this.error,
+      _internal: { ...this._internal, reported: false },
+    } as apiError;
+
+    return err(response).mapErr(orReport);
+  }
+}
 
 /**
  * Simplifies database query operations by handling common error patterns and type checking.

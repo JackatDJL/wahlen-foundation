@@ -19,7 +19,7 @@ import {
   apiResponseTypes,
   type apiType,
   databaseInteraction,
-  deconstructValue,
+  deconstruct,
   orReport,
   uuidType,
   validateEditability,
@@ -50,7 +50,7 @@ export const deleteChunkProcedure = protectedProcedure
         continue;
       }
 
-      const data = deconstructValue(question).data();
+      const data = deconstruct(question).data();
 
       switch (data.type) {
         case "info": {
@@ -65,7 +65,7 @@ export const deleteChunkProcedure = protectedProcedure
             continue;
           }
 
-          const infoData = deconstructValue(infoRequest).data();
+          const infoData = deconstruct(infoRequest).data();
 
           if (infoData.image) {
             const dBId = await deleteById(infoData.image);
@@ -99,7 +99,7 @@ export const deleteChunkProcedure = protectedProcedure
             continue;
           }
 
-          const trueFalseData = deconstructValue(trueFalseRequest).data();
+          const trueFalseData = deconstruct(trueFalseRequest).data();
 
           const imgDeleteArray = [trueFalseData.o1Image, trueFalseData.o2Image];
 
@@ -138,9 +138,7 @@ export const deleteChunkProcedure = protectedProcedure
             continue;
           }
 
-          const multipleChoiceData = deconstructValue(
-            multipleChoiceRequest,
-          ).data();
+          const multipleChoiceData = deconstruct(multipleChoiceRequest).data();
 
           const requestedImageDeletion = multipleChoiceData.content
             ? multipleChoiceData.content.map((item) => item.image)

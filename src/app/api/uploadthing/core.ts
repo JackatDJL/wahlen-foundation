@@ -19,7 +19,7 @@ import {
   apiResponseStatus,
   apiResponseTypes,
   apiType,
-  deconstructValue,
+  deconstruct,
   orReport,
 } from "~/server/api/routers/utility";
 
@@ -39,7 +39,7 @@ async function createFile({ input }: { input: InputData }) {
   const response = await api.files.create(input);
   if (response.isErr()) return err(response.error);
 
-  const data = deconstructValue(response).data();
+  const data = deconstruct(response).data();
 
   console.log("Server assigned UUID ", data.file.id, " to ", data.file.ufsKey);
 

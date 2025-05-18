@@ -17,7 +17,7 @@ import {
   apiErrorStatus,
   apiErrorTypes,
   databaseInteraction,
-  deconstructValue,
+  deconstruct,
   validateEditability,
   type apiType,
 } from "../utility";
@@ -61,7 +61,7 @@ export async function setUpdateDateOnQuestion(
   );
   if (response.isErr()) return err(response.error);
 
-  return ok(deconstructValue(response));
+  return ok(deconstruct(response));
 }
 
 const editInfoType = z.object({
@@ -158,7 +158,7 @@ export const editRouter = createTRPCRouter({
       );
       if (response.isErr()) return err(response.error);
 
-      return ok(deconstructValue(response));
+      return ok(deconstruct(response));
     }),
   true_false: protectedProcedure
     .input(editTrueFalseType)
@@ -194,7 +194,7 @@ export const editRouter = createTRPCRouter({
         );
         if (response.isErr()) return err(response.error);
 
-        return ok(deconstructValue(response));
+        return ok(deconstruct(response));
       },
     ),
   multiple_choice: protectedProcedure
@@ -217,7 +217,7 @@ export const editRouter = createTRPCRouter({
         );
         if (data.isErr()) return err(data.error);
 
-        let content = deconstructValue(data).data().content ?? [];
+        let content = deconstruct(data).data().content ?? [];
 
         const { addRequest, editRequest, deleteRequest } =
           input.content.reduce<{
@@ -293,7 +293,7 @@ export const editRouter = createTRPCRouter({
         );
         if (response.isErr()) return err(response.error);
 
-        return ok(deconstructValue(response));
+        return ok(deconstruct(response));
       },
     ),
 });
