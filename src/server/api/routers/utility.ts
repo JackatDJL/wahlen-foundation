@@ -12,16 +12,32 @@ import { publicProcedure } from "../trpc";
 import posthog from "posthog-js";
 import * as Sentry from "@sentry/nextjs";
 
+// --- --- Utility Types --- ---
+
+// --- Zod ---
+
+/** UUID validation type using Zod */
 export const uuidType = z.string().uuid();
 
+/** Type for objects that contain an ID field */
 export const identifyingInputType = z.object({
   id: uuidType,
 });
 
+// --- TRPC ---
+
+/** A placeholder procedure that returns an empty string */
 export const blankPlaceholdingCallableProcedure = publicProcedure.mutation(
   () => "",
 );
 
+// --- --- API Neverthrow Definitions --- ---
+
+// --- Error Types ---
+
+// -- Status and Types --
+
+/** Enum representing different API error status categories */
 export enum apiErrorStatus {
   NotFound = "NotFound",
   Forbidden = "Forbidden",
@@ -32,41 +48,64 @@ export enum apiErrorStatus {
   Failed = "Failed",
 }
 
+/** Detailed error types for API responses */
 export enum apiErrorTypes {
   NotFound = "NotFound",
 
   // Forbidden types
+  /** Generic forbidden error */
   Forbidden = "Forbidden",
+  /** Authorization-related forbidden error */
   ForbiddenAuthorisation = "Forbidden.Authorisation",
+  /** Invalid ownership forbidden error */
   ForbiddenInvalidOwnership = "Forbidden.InvalidOwnership",
+  /** Activity state mismatch forbidden error */
   ForbiddenActivityMismatch = "Forbidden.ActivityMismatch",
 
   // BadRequest types
+  /** Unknown bad request error */
   BadRequestUnknown = "BadRequest.Unknown",
+  /** Internal server error */
   BadRequestInternalServerError = "BadRequest.InternalServerError",
+  /** Sequential operation failure */
   BadRequestSequentialOperationFailure = "BadRequest.SequentialOperationFailure",
+  /** Data corruption error */
   BadRequestCorrupted = "BadRequest.Corrupted",
 
   // Conflict types
+  /** Duplicate data conflict */
   ConflictDuplicate = "Conflict.Duplicate",
+  /** Invalid data conflict */
   ConflictInvalid = "Conflict.Invalid",
+  /** Invalid state conflict */
   ConflictInvalidState = "Conflict.InvalidState",
+  /** Data transcending boundaries conflict */
   ConflictDataTranscending = "Conflict.DataIsTranscending",
 
   // Incomplete types
+  /** Scheduling-related incomplete error */
   IncompleteScheduling = "Incomplete.Scheduling",
+  /** Missing start date scheduling error */
   IncompleteSchedulingStartDate = "Incomplete.Scheduling.MissingStartDate",
+  /** Provider identification incomplete error */
   IncompleteProviderIdentification = "Incomplete.ProviderIdentification",
 
   // ValidationError types
+  /** Zod validation error */
   ValidationErrorZod = "ValidationError.Zod",
+  /** Unknown validation error */
   ValidationErrorUnknown = "ValidationError.Unknown",
 
   // Failed types
+  /** Generic failure */
   Failed = "Failed",
+  /** Unknown failure */
   FailedUnknown = "Failed.Unknown",
 }
 
+// -- Error Response Type --
+
+/** Union type representing all possible API error responses */
 export type apiError =
   | {
       status: apiErrorStatus.ValidationError;
@@ -123,31 +162,52 @@ export type apiError =
       };
     };
 
+// --- Response Types ---
+
+// -- Status and Types --
+
+/** Enum representing different API response status categories */
 export enum apiResponseStatus {
+  /** Operation completed successfully */
   Success = "Success",
+  /** Operation completed with partial success */
   PartialSuccess = "PartialSuccess",
+  /** Operation failed but can continue */
   FailForeward = "FailForeward",
+  /** Operation had no effect */
   Inconsequential = "Inconsequential",
 }
 
+/** Detailed response types for API responses */
 export enum apiResponseTypes {
+  /** Generic success response */
   Success = "Success",
+  /** Success response with no data */
   SuccessNoData = "Success.NoData",
 
   // PartialSuccess types
-  PartialSuccessPrivate = "PartialSuccess.Private", // Returns Partial Information with info that the Data has been withheld because target hasnt been published yet
+  /** Partial success with private data */
+  PartialSuccessPrivate = "PartialSuccess.Private",
+  /** Partial success after completion */
   PartialSuccessPostCompletion = "PartialSuccess.PostCompletion",
+  /** Partial success for archived data */
   PartialSuccessArchived = "PartialSuccess.Archived",
 
   // FailForeward types
+  /** Fail forward with message overwrite */
   FailForewardOverwriteMessage = "FailForeward.OverwriteMessage",
+  /** Fail forward with appended message */
   FailForewardAppendMessage = "FailForeward.AppendMessage",
+  /** Fail forward with forced status */
   FailForewardForceStatus = "FailForeward.ForceStatus",
 
+  /** Operation had no effect */
   Inconsequential = "Inconsequential",
 }
 
-// TODO: Neue idee, auch ein _intenal für apiResponse mit auto maping und dass alle apiResponses auch gelogt werden in postgress oder sentry
+// -- Response Type --
+
+/** Generic API response type */
 export type apiResponse<T> =
   | {
       status: apiResponseStatus.Inconsequential;
@@ -177,31 +237,48 @@ export type apiResponse<T> =
       data: T extends void | undefined | null ? never : T;
     };
 
+// --- --- API Utility Return Type Definitions --- ---
+
+// --- Async Types ---
+
+/** Type alias for API response wrapped in Result type */
 export type apiType<T> = Promise<
   Ok<apiResponse<T>, apiError> | Err<never, apiError>
 >;
 
+/** Type alias for API error response */
 export type apiErr<T> = Promise<Err<apiResponse<T>, apiError>>;
+/** Type alias for API response that can never be successful */
 export type apiNeverOk = Promise<Err<never, apiError>>;
 
+/** Type alias for successful API response */
 export type apiOk<T> = Promise<Ok<apiResponse<T>, apiError>>;
+/** Type alias for API response that can never fail */
 export type apiNeverFail<T> = Promise<Ok<apiResponse<T>, never>>;
 
+// --- Synchronous Types ---
+
+/** Helper type to get the resolved type of a Promise */
 export type mkSync<T> = Awaited<T>;
 
+/** Synchronous version of apiType */
 export type syncType<T> = mkSync<apiType<T>>;
 
+/** Synchronous version of apiErr */
 export type syncErr<T> = mkSync<apiErr<T>>;
+/** Synchronous version of apiNeverOk */
 export type syncNeverOk = mkSync<apiNeverOk>;
 
+/** Synchronous version of apiOk */
 export type syncOk<T> = mkSync<apiOk<T>>;
+/** Synchronous version of apiNeverFail */
 export type syncNeverFail<T> = mkSync<apiNeverFail<T>>;
 
-export enum databaseInteractionTypes {
-  Default = "Default",
-  Sequencial = "Sequencial",
-}
+// --- --- API Neverthrow Function Utilities --- ---
 
+// --- Result Handling ---
+
+/** Deconstructs a Result type into its value or error */
 export function deconstruct<T>(
   input: Awaited<apiOk<T> | apiErr<T>>,
 ):
@@ -219,6 +296,7 @@ export function deconstruct<T>(
   };
 }
 
+/** Passes back a Result type unchanged */
 export async function passBack<T>(
   input: Awaited<apiOk<T> | apiErr<T>>,
 ): apiType<T> {
@@ -228,12 +306,14 @@ export async function passBack<T>(
   return ok(input.value);
 }
 
+// --- Error Reporting ---
+
+/** Reports an error to error tracking services if reportable */
 export function reportError(error: apiError): apiError {
   if (!error._internal.reportable) return error;
   if (error._internal.reported) return error;
 
   console.error(error);
-
   Sentry.captureException(error);
   posthog.captureException(error);
 
@@ -246,9 +326,14 @@ export function reportError(error: apiError): apiError {
   };
 }
 
-// alias for return err({}: apiError).mapErr(orReport)
+/** Alias for reportError */
 export const orReport = reportError;
 
+// --- --- Builder Pattern Implementation --- ---
+
+// --- Type Mappings ---
+
+/** Generates mappings between status enums and their corresponding type enums */
 function generateTypeMappings<
   StatusEnum extends Record<string, string>,
   TypesEnum extends Record<string, string>,
@@ -285,6 +370,11 @@ const responseMappings = generateTypeMappings(
 
 const errorMappings = generateTypeMappings(apiErrorStatus, apiErrorTypes);
 
+// --- Success Builder Types ---
+
+// -- Chain Types --
+
+/** Helper type for the initial chain of a successful response builder */
 type OkInitialChain<T> = {
   [K in keyof typeof apiResponseStatus]: () => OkStatusChain<
     T,
@@ -292,6 +382,7 @@ type OkInitialChain<T> = {
   >;
 };
 
+/** Helper type for the status chain of a successful response builder */
 type OkStatusChain<T, Status extends apiResponseStatus> = {
   message(msg: string): OkStatusChain<T, Status>;
   data(data: T): OkStatusChain<T, Status>;
@@ -306,6 +397,7 @@ type OkStatusChain<T, Status extends apiResponseStatus> = {
     : never]: () => OkFinalizeChain<T, Status, K>;
 };
 
+/** Helper type for the final chain of a successful response builder */
 interface OkFinalizeChain<
   T,
   Status extends apiResponseStatus,
@@ -316,6 +408,9 @@ interface OkFinalizeChain<
   build(): Awaited<apiOk<T>>;
 }
 
+// -- Input Types --
+
+/** Type for the function input of a successful response builder */
 type OkFunctionInput<T> = (
   s: typeof apiResponseStatus,
   t: typeof apiResponseTypes,
@@ -326,8 +421,12 @@ type OkFunctionInput<T> = (
   data?: T;
 };
 
+/** Type for the object input of a successful response builder */
 type OkObjectInput<T> = Partial<apiResponse<T>>;
 
+// -- Builder Implementation --
+
+/** Builder class for constructing successful API responses */
 class OkBuilder<T> {
   private status?: apiResponseStatus;
   private type?: apiResponseTypes;
@@ -431,12 +530,18 @@ class OkBuilder<T> {
   }
 }
 
+// --- Error Builder Types ---
+
+// -- Chain Types --
+
+/** Helper type for the initial chain of an error response builder */
 type ErrInitialChain = {
   [K in keyof typeof apiErrorStatus]: () => ErrStatusChain<
     (typeof apiErrorStatus)[K]
   >;
 };
 
+/** Helper type for the status chain of an error response builder */
 type ErrStatusChain<Status extends apiErrorStatus> = {
   message(msg: string): ErrStatusChain<Status>;
   error(err: unknown): ErrStatusChain<Status>;
@@ -452,6 +557,7 @@ type ErrStatusChain<Status extends apiErrorStatus> = {
   >;
 };
 
+/** Helper type for the final chain of an error response builder */
 interface ErrFinalizeChain<
   Status extends apiErrorStatus,
   Type extends apiErrorTypes,
@@ -461,6 +567,9 @@ interface ErrFinalizeChain<
   build(): Awaited<apiNeverOk>;
 }
 
+// -- Input Types --
+
+/** Type for the function input of an error response builder */
 type ErrFunctionInput = (
   s: typeof apiErrorStatus,
   t: typeof apiErrorTypes,
@@ -471,8 +580,12 @@ type ErrFunctionInput = (
   error?: unknown;
 };
 
+/** Type for the object input of an error response builder */
 type ErrObjectInput = Partial<apiError>;
 
+// -- Builder Implementation --
+
+/** Builder class for constructing API error responses */
 class ErrBuilder {
   private status?: apiErrorStatus;
   private type?: apiErrorTypes;
@@ -593,6 +706,9 @@ class ErrBuilder {
   }
 }
 
+// --- --- Builder Factory --- ---
+
+/** Factory function for creating API response builders */
 export function construct<T>() {
   return {
     ok: (
@@ -622,6 +738,9 @@ export function construct<T>() {
   };
 }
 
+// --- Builder Aliases ---
+
+/** Alias function for creating successful API responses */
 function okAlias<T>(): OkInitialChain<T>;
 function okAlias<T>(input: OkFunctionInput<T>): syncType<T>;
 function okAlias<T>(input: OkObjectInput<T>): syncType<T>;
@@ -638,6 +757,7 @@ function okAlias<T>(
   return construct<T>().ok() as OkInitialChain<T>;
 }
 
+/** Alias function for creating API error responses */
 function errAlias(): ErrInitialChain;
 function errAlias(input: ErrFunctionInput): syncNeverOk;
 function errAlias(input: ErrObjectInput): syncNeverOk;
@@ -656,6 +776,21 @@ function errAlias(
 
 export { okAlias as ok, errAlias as err };
 
+// --- --- Database Interactions --- ---
+
+// --- Types ---
+
+/** Enum for different types of database interactions */
+export enum databaseInteractionTypes {
+  /** Default database interaction */
+  Default = "Default",
+  /** Sequential database operation */
+  Sequencial = "Sequencial",
+}
+
+// --- Core Functions ---
+
+/** Executes a database query and handles the response formatting */
 export async function databaseInteraction<T, D extends boolean = true>(
   query: Promise<T[]>,
   deconstructArray = true as D,
@@ -706,6 +841,9 @@ export async function databaseInteraction<T, D extends boolean = true>(
   }));
 }
 
+// --- Election Management ---
+
+/** Updates the status of an election based on current date and state */
 export async function updateElectionStatus(
   id: z.infer<typeof uuidType>,
 ): apiType<void> {
@@ -822,18 +960,7 @@ export async function updateElectionStatus(
   });
 }
 
-/**
- * Validates the provided UUID and ensures the associated question or election is not active.
- *
- * This function first validates that the given UUID is valid, then determines if it's a question or election ID.
- * It fetches the election data and checks if it's in an editable state. If the election is active, completed,
- * has results, or is archived, editing is forbidden. Otherwise, it confirms the election is editable.
- *
- * @alias throwIfActive
- *
- * @param id - The UUID identifying a question or election.
- * @returns A Result signifying success if the election is non-active, or an error Result detailing the failure reason.
- */
+/** Validates the provided UUID and ensures the associated question or election is not active */
 export async function validateEditability(
   id: z.infer<typeof uuidType>,
 ): apiType<void> {
