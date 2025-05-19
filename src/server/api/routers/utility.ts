@@ -113,7 +113,7 @@ export type apiError =
       message: string;
       error: z.ZodError;
       _internal: {
-        reported: false;
+        reported: boolean;
         reportable: false;
       };
     }
@@ -137,7 +137,7 @@ export type apiError =
       message: string;
       error: null;
       _internal: {
-        reported: false;
+        reported: boolean;
         reportable: false;
       };
     }
@@ -186,6 +186,7 @@ export enum apiResponseTypes {
   SuccessNoData = "Success.NoData",
 
   // PartialSuccess types
+  PartialSuccess = "PartialSuccess", // Added for auto-setting
   /** Partial success with private data */
   PartialSuccessPrivate = "PartialSuccess.Private",
   /** Partial success after completion */
@@ -194,6 +195,7 @@ export enum apiResponseTypes {
   PartialSuccessArchived = "PartialSuccess.Archived",
 
   // FailForeward types
+  FailForeward = "FailForeward", // Added for auto-setting
   /** Fail forward with message overwrite */
   FailForewardOverwriteMessage = "FailForeward.OverwriteMessage",
   /** Fail forward with appended message */
@@ -208,34 +210,16 @@ export enum apiResponseTypes {
 // -- Response Type --
 
 /** Generic API response type */
-export type apiResponse<T> =
-  | {
-      status: apiResponseStatus.Inconsequential;
-      type?: apiResponseTypes.Inconsequential;
-      message?: string;
-      data?: T extends void | undefined | null ? undefined : T;
-    }
-  | {
-      status: apiResponseStatus.Success;
-      type?: apiResponseTypes.Success;
-      message?: string;
-      data: T;
-    }
-  | {
-      status: apiResponseStatus.Success;
-      type: apiResponseTypes.SuccessNoData;
-      message?: string;
-      data?: T extends void | undefined | null ? undefined : T;
-    }
-  | {
-      status: apiResponseStatus.FailForeward;
-      type:
-        | apiResponseTypes.FailForewardOverwriteMessage
-        | apiResponseTypes.FailForewardAppendMessage
-        | apiResponseTypes.FailForewardForceStatus;
-      message: string;
-      data: T extends void | undefined | null ? never : T;
-    };
+export type apiResponse<T> = {
+  status: apiResponseStatus;
+  type?: apiResponseTypes;
+  message?: string;
+  data?: T extends void | undefined | null ? undefined : T;
+  _internal: {
+    loggable: boolean;
+    logged: boolean;
+  };
+};
 
 // --- --- API Utility Return Type Definitions --- ---
 
@@ -306,12 +290,20 @@ export async function passBack<T>(
   return ok(input.value);
 }
 
-// --- Error Reporting ---
+// --- Reporting ---
 
 /** Reports an error to error tracking services if reportable */
 export function reportError(error: apiError): apiError {
-  if (!error._internal.reportable) return error;
-  if (error._internal.reported) return error;
+  // Ensure _internal exists and has reportable/reported properties
+  if (
+    typeof error._internal?.reportable === "undefined" ||
+    typeof error._internal.reported === "undefined"
+  ) {
+    console.error("Invalid error object structure for reporting:", error);
+    return error; // Return original error if structure is invalid
+  }
+
+  if (!error._internal.reportable || error._internal.reported) return error;
 
   console.error(error);
   Sentry.captureException(error);
@@ -326,8 +318,68 @@ export function reportError(error: apiError): apiError {
   };
 }
 
+/** Logs/reports a successful response based on its status and internal state */
+export function reportResponse<T>(response: apiResponse<T>): apiResponse<T> {
+  // Ensure _internal exists and has loggable/logged properties
+  if (
+    typeof response._internal?.loggable === "undefined" ||
+    typeof response._internal.logged === "undefined"
+  ) {
+    console.log("Invalid response object structure for logging:", response);
+    return response; // Return original response if structure is invalid
+  }
+
+  if (!response._internal.loggable || response._internal.logged)
+    return response;
+
+  switch (response.status) {
+    case apiResponseStatus.Success:
+      console.info("API Success:", response);
+      // Optionally capture info/analytics for success
+      break;
+    case apiResponseStatus.PartialSuccess:
+      console.warn("API Partial Success:", response);
+      // Optionally capture warnings/analytics for partial success
+      break;
+    case apiResponseStatus.FailForeward:
+      console.warn("API Fail Foreward:", response);
+      // Optionally capture warnings/analytics for fail foreward
+      break;
+    case apiResponseStatus.Inconsequential:
+      console.log("API Inconsequential:", response);
+      // Optionally capture info/analytics for inconsequential
+      break;
+    default:
+      console.log("API Response:", response);
+  }
+
+  Sentry.captureEvent({
+    message: `API Response: ${response.status}`,
+    extra: response,
+  });
+
+  posthog.capture(`api-log:${response.status}`, {
+    ...response,
+    _internal: {
+      ...response._internal,
+      logged: true,
+    },
+  });
+
+  return {
+    ...response,
+    _internal: {
+      ...response._internal,
+      logged: true,
+    },
+  };
+}
+
 /** Alias for reportError */
 export const orReport = reportError;
+
+/** Alias for reportResponse */
+export const Log = reportResponse;
 
 // --- --- Builder Pattern Implementation --- ---
 
@@ -372,7 +424,14 @@ const errorMappings = generateTypeMappings(apiErrorStatus, apiErrorTypes);
 
 // --- Success Builder Types ---
 
-// -- Chain Types --
+// Helper type to filter available type methods based on Status
+type FilteredOkTypeMethods<T, Status extends apiResponseStatus> = {
+  [K in apiResponseTypes as K extends `${Status}.${infer Rest}`
+    ? Rest
+    : K extends Status
+      ? K
+      : never]: () => OkFinalizeChain<T, Status, K>;
+};
 
 /** Helper type for the initial chain of a successful response builder */
 type OkInitialChain<T> = {
@@ -386,16 +445,8 @@ type OkInitialChain<T> = {
 type OkStatusChain<T, Status extends apiResponseStatus> = {
   message(msg: string): OkStatusChain<T, Status>;
   data(data: T): OkStatusChain<T, Status>;
-  build(): Awaited<apiOk<T>>;
-} & {
-  [K in apiResponseTypes as K extends `${Status}.${infer Rest}`
-    ? Rest
-    : K]: () => OkFinalizeChain<T, Status, K>;
-} & {
-  [K in apiResponseTypes as K extends Status
-    ? K
-    : never]: () => OkFinalizeChain<T, Status, K>;
-};
+  build(): Awaited<apiOk<T>>; // Always include build on the status chain
+} & FilteredOkTypeMethods<T, Status>; // Add filtered type methods
 
 /** Helper type for the final chain of a successful response builder */
 interface OkFinalizeChain<
@@ -428,11 +479,19 @@ type OkObjectInput<T> = Partial<apiResponse<T>>;
 
 /** Builder class for constructing successful API responses */
 class OkBuilder<T> {
-  private status?: apiResponseStatus;
-  private type?: apiResponseTypes;
-  private _message?: string;
-  private _data?: T;
-  private inputType: "chain" | "function" | "object";
+  protected status?: apiResponseStatus;
+  protected type?: apiResponseTypes;
+  protected _message?: string;
+  protected _data?: T;
+  protected _internal: apiResponse<T>["_internal"] = {
+    loggable: false, // Default to not loggable
+    logged: false,
+  };
+  protected inputType: "chain" | "function" | "object";
+
+  public setStatus(status: apiResponseStatus) {
+    this.status = status;
+  }
 
   constructor(input?: OkFunctionInput<T> | OkObjectInput<T>) {
     if (typeof input === "function") {
@@ -442,6 +501,7 @@ class OkBuilder<T> {
       this.type = result.type;
       this._message = result.message;
       this._data = result.data;
+      // _internal is not set via function input currently
     } else if (
       input !== undefined &&
       typeof input === "object" &&
@@ -452,38 +512,39 @@ class OkBuilder<T> {
       this.type = input.type;
       this._message = input.message;
       this._data = input.data;
+      this._internal = input._internal ?? { loggable: false, logged: false };
     } else {
       this.inputType = "chain";
-      for (const type of Object.values(apiResponseTypes)) {
-        const methodName = type.split(".").pop()!;
-        const simpleMethodName =
-          String(type) === String(this.status) ? type : methodName;
-        (this as any)[simpleMethodName] = () => {
-          this.type = type;
-          return this;
-        };
-      }
-      for (const status of Object.values(apiResponseStatus)) {
-        (this as any)[status] = () => {
-          this.status = status;
-          this.addChainableMethods();
-          return this;
-        };
-      }
+      // Initial chain methods (status methods) are added by the factory function
     }
   }
 
-  private addChainableMethods(): void {
-    (this as any)._message = this._message;
-    (this as any)._data = this._data;
-    (this as any).build = this.build.bind(this);
+  // Method to set internal logging state (chainable)
+  _internalLoggable(loggable = true): OkStatusChain<T, any> {
+    if (this.inputType !== "chain") {
+      // This will result in a TypeScript error because _internalLoggable is not on the non-chain types
+      // We can add a runtime check for safety, but the primary enforcement is TS
+      console.error("Cannot call _internalLoggable on non-chain input");
+      return this as unknown as OkStatusChain<T, any>; // Explicitly cast to expected type
+    }
+    this._internal.loggable = loggable;
+    return this as unknown as OkStatusChain<T, any>; // Return 'this' to continue chaining with explicit type
+  }
+
+  // Method to add chainable type methods based on the selected status
+  public addChainableMethods(): void {
+    // Add common chainable methods
+    this.message = this.message.bind(this);
+    this.data = this.data.bind(this);
+    this.build = this.build.bind(this);
+    this._internalLoggable = this._internalLoggable.bind(this); // Add internal logging method
 
     // Remove all previous type methods
     for (const type of Object.values(apiResponseTypes)) {
       const methodName = type.split(".").pop()!;
       const simpleMethodName =
         String(type) === String(this.status) ? type : methodName;
-      delete (this as any)[simpleMethodName];
+      delete (this as Record<string, unknown>)[simpleMethodName];
     }
 
     // Add only the relevant type methods for the current status
@@ -494,45 +555,74 @@ class OkBuilder<T> {
       const simpleMethodName =
         String(type) === String(this.status) ? type : methodName;
 
+      // Add the type method
       (this as any)[simpleMethodName] = () => {
         this.type = type;
+        // If type name matches status name, auto-set the type
+        if (String(this.type) === String(this.status)) {
+          this.type = type;
+        }
         return this;
       };
+
+      // If type name matches status name, auto-set the type
+      if (String(type) === String(this.status)) {
+        this.type = type;
+      }
     }
   }
 
   message(msg: string): OkStatusChain<T, any> {
     if (this.inputType !== "chain") {
-      // TODO: TYPEERROR
+      // This will result in a TypeScript error
+      console.error("Cannot call message() on non-chain input");
       return this as unknown as OkStatusChain<T, any>;
     }
     this._message = msg;
-    return this as unknown as OkStatusChain<T, any>;
+    return this as unknown as OkStatusChain<T, any>; // Return 'this' to continue chaining with explicit type
   }
 
   data(data: T): OkStatusChain<T, any> {
     if (this.inputType !== "chain") {
-      return this as unknown as OkStatusChain<T, any>;
+      // This will result in a TypeScript error
+      console.error("Cannot call data() on non-chain input");
+      return this as unknown as OkStatusChain<T, any>; // Return 'this' for runtime compatibility
     }
     this._data = data;
-    return this as unknown as OkStatusChain<T, any>;
+    return this as unknown as OkStatusChain<T, any>; // Return 'this' to continue chaining with explicit type
   }
 
   build(): Awaited<apiOk<T>> {
-    const response = {
-      status: this.status ?? apiResponseStatus.Inconsequential,
+    if (this.inputType !== "chain") {
+      // This will result in a TypeScript error
+      console.error("Cannot call build() on non-chain input");
+    }
+
+    const response: apiResponse<T> = {
+      status: this.status ?? apiResponseStatus.Inconsequential, // Default status if not set
       type: this.type,
       message: this._message,
-      data: this._data,
-    } as apiResponse<T>; // KEEP THIS THIS SOMEHOW WORKS!!!!!!
+      data: this._data as T extends void | undefined | null ? undefined : T, // Cast to correct data type
+      _internal: { ...this._internal, logged: false }, // Reset logged state before reporting
+    };
 
-    return ok(response);
+    // Report the response before returning
+    const reportedResponse = reportResponse(response);
+
+    return ok(reportedResponse);
   }
 }
 
 // --- Error Builder Types ---
 
-// -- Chain Types --
+// Helper type to filter available type methods based on Status
+type FilteredErrTypeMethods<Status extends apiErrorStatus> = {
+  [K in apiErrorTypes as K extends `${Status}.${infer Rest}`
+    ? Rest
+    : K extends Status
+      ? K
+      : never]: () => ErrFinalizeChain<Status, K>;
+};
 
 /** Helper type for the initial chain of an error response builder */
 type ErrInitialChain = {
@@ -545,17 +635,8 @@ type ErrInitialChain = {
 type ErrStatusChain<Status extends apiErrorStatus> = {
   message(msg: string): ErrStatusChain<Status>;
   error(err: unknown): ErrStatusChain<Status>;
-  build(): Awaited<apiNeverOk>;
-} & {
-  [K in apiErrorTypes as K extends `${Status}.${infer Rest}`
-    ? Rest
-    : K]: () => ErrFinalizeChain<Status, K>;
-} & {
-  [K in apiErrorTypes as K extends Status ? K : never]: () => ErrFinalizeChain<
-    Status,
-    K
-  >;
-};
+  build(): Awaited<apiNeverOk>; // Always include build on the status chain
+} & FilteredErrTypeMethods<Status>; // Add filtered type methods
 
 /** Helper type for the final chain of an error response builder */
 interface ErrFinalizeChain<
@@ -583,19 +664,23 @@ type ErrFunctionInput = (
 /** Type for the object input of an error response builder */
 type ErrObjectInput = Partial<apiError>;
 
-// -- Builder Implementation --
+// -- Builder Implementation ---
 
 /** Builder class for constructing API error responses */
 class ErrBuilder {
-  private status?: apiErrorStatus;
-  private type?: apiErrorTypes;
-  private _message?: string;
-  private _error?: unknown;
-  private _internal: apiError["_internal"] = {
+  protected status?: apiErrorStatus;
+  protected type?: apiErrorTypes;
+  protected _message?: string;
+  protected _error?: unknown;
+  protected _internal: apiError["_internal"] = {
     reported: false,
     reportable: true,
   };
-  private inputType: "chain" | "function" | "object";
+  protected inputType: "chain" | "function" | "object";
+
+  public setStatus(status: apiErrorStatus) {
+    this.status = status;
+  }
 
   constructor(input?: ErrFunctionInput | ErrObjectInput) {
     if (typeof input === "function") {
@@ -612,36 +697,27 @@ class ErrBuilder {
       this.type = input.type;
       this._message = input.message;
       this._error = input.error;
-      this.updateInternal();
+      this._internal = input._internal ?? { reported: false, reportable: true }; // Use provided internal or default
+      this.updateInternal(); // Update based on final status/type
     } else {
       this.inputType = "chain";
-      for (const status of Object.values(apiErrorStatus)) {
-        (this as any)[status] = () => {
-          this.status = status;
-          this.updateInternal();
-          this.addChainableMethods();
-          return this;
-        };
-      }
+      // Initial chain methods (status methods) are added by the factory function
     }
   }
 
-  private addChainableMethods(): void {
-    (this as any).message = (msg: string) => {
-      this._message = msg;
-      return this;
-    };
-    (this as any).error = (err: unknown) => {
-      this._error = err;
-      return this;
-    };
-    (this as any).build = this.build.bind(this);
+  // Method to add chainable type methods based on the selected status
+  public addChainableMethods(): void {
+    // Add common chainable methods
+    this.message = this.message.bind(this);
+    this.error = this.error.bind(this);
+    this.build = this.build.bind(this);
 
+    // Remove all previous type methods
     for (const type of Object.values(apiErrorTypes)) {
       const methodName = type.split(".").pop()!;
       const simpleMethodName =
         String(type) === String(this.status) ? type : methodName;
-      delete (this as any)[simpleMethodName];
+      delete (this as Record<string, unknown>)[simpleMethodName];
     }
 
     const types = this.status ? (errorMappings[this.status] ?? []) : [];
@@ -651,33 +727,49 @@ class ErrBuilder {
       const simpleMethodName =
         String(type) === String(this.status) ? type : methodName;
 
+      // Add the type method
       (this as any)[simpleMethodName] = () => {
         this.type = type;
         this.updateInternal();
+        // If type name matches status name, auto-set the type
+        if (String(this.type) === String(this.status)) {
+          this.type = type;
+        }
         return this;
       };
+
+      // If type name matches status name, auto-set the type
+      if (String(type) === String(this.status)) {
+        this.type = type;
+        this.updateInternal(); // Update internal state when type is set
+      }
     }
   }
 
   message(msg: string): ErrStatusChain<any> {
     if (this.inputType !== "chain") {
-      // TODO: TYPEERROR
-      return this as unknown as ErrStatusChain<any>;
+      // This will result in a TypeScript error
+      console.error("Cannot call message() on non-chain input");
+      return this as unknown as ErrStatusChain<any>; // Return 'this' with explicit type for runtime compatibility
     }
     this._message = msg;
-    return this as unknown as ErrStatusChain<any>;
+    return this as unknown as ErrStatusChain<any>; // Return 'this' to continue chaining
   }
 
   error(err: unknown): ErrStatusChain<any> {
     if (this.inputType !== "chain") {
-      // TODO: TYPEERROR
-      return this as unknown as ErrStatusChain<any>;
+      // This will result in a TypeScript error
+      console.error("Cannot call error() on non-chain input");
+      return this as unknown as ErrStatusChain<any>; // Return 'this' with explicit type for runtime compatibility
     }
     this._error = err;
-    return this as unknown as ErrStatusChain<any>;
+    return this as unknown as ErrStatusChain<any>; // Return 'this' to continue chaining
   }
 
   private updateInternal(): void {
+    // Default reportable to true unless specifically set otherwise
+    this._internal.reportable = true;
+
     if (
       this.status === apiErrorStatus.ValidationError &&
       this.type === apiErrorTypes.ValidationErrorZod
@@ -688,21 +780,29 @@ class ErrBuilder {
       this.type === apiErrorTypes.NotFound
     ) {
       this._internal.reportable = false;
-    } else {
-      this._internal.reportable = true; // Default for most errors
     }
+    // If status and type are set and don't match the above, reportable remains true
+    // If only status is set, reportable remains true by default
   }
 
   build(): Awaited<apiNeverOk> {
-    const response = {
-      status: this.status,
-      type: this.type,
+    if (this.inputType !== "chain") {
+      // This will result in a TypeScript error
+      console.error("Cannot call build() on non-chain input");
+    }
+
+    const response: apiError = {
+      status: this.status ?? apiErrorStatus.Failed, // Default status if not set
+      type: this.type ?? apiErrorTypes.FailedUnknown, // Default type if not set
       message: this._message ?? "An error occurred",
       error: this._error ?? null,
-      _internal: { ...this._internal, reported: false },
-    } as apiError;
+      _internal: { ...this._internal, reported: false }, // Reset reported state before reporting
+    };
 
-    return err(response).mapErr(orReport) as Awaited<apiNeverOk>;
+    // Report the error before returning
+    const reportedError = reportError(response);
+
+    return err(reportedError) as Awaited<apiNeverOk>;
   }
 }
 
@@ -721,6 +821,18 @@ export function construct<T>() {
       ) {
         return builder.build();
       }
+
+      // Add initial chain methods (status methods) to the builder instance
+      for (const status of Object.values(apiResponseStatus)) {
+        (builder as any)[status] = () => {
+          builder.setStatus(status);
+          builder.addChainableMethods(); // Add methods relevant to the selected status
+          return builder;
+        };
+      }
+      // Add chainable methods initially, before a status is selected, so build() is available.
+      // TypeScript will handle if required properties are missing when build() is called.
+      builder.addChainableMethods();
       return builder as unknown as OkInitialChain<T>;
     },
     err: (
@@ -733,14 +845,26 @@ export function construct<T>() {
       ) {
         return builder.build();
       }
+
+      // Add initial chain methods (status methods) to the builder instance
+      for (const status of Object.values(apiErrorStatus)) {
+        (builder as any)[status] = () => {
+          builder.setStatus(status);
+          // Use public method to update internal state
+          builder.addChainableMethods();
+          return builder;
+        };
+      }
+      // Add chainable methods initially, before a status is selected, so build() is available.
+      // TypeScript will handle if required properties are missing when build() is called.
+      builder.addChainableMethods();
       return builder as unknown as ErrInitialChain;
     },
   };
 }
-
 // --- Builder Aliases ---
 
-/** Alias function for creating successful API responses */
+/** Utility function to create neverthrow objects with api type */
 function okAlias<T>(): OkInitialChain<T>;
 function okAlias<T>(input: OkFunctionInput<T>): syncType<T>;
 function okAlias<T>(input: OkObjectInput<T>): syncType<T>;
@@ -757,7 +881,7 @@ function okAlias<T>(
   return construct<T>().ok() as OkInitialChain<T>;
 }
 
-/** Alias function for creating API error responses */
+/** Utility function to create neverthrow objects with api type */
 function errAlias(): ErrInitialChain;
 function errAlias(input: ErrFunctionInput): syncNeverOk;
 function errAlias(input: ErrObjectInput): syncNeverOk;
@@ -954,10 +1078,10 @@ export async function updateElectionStatus(
     }
   }
 
-  return okAlias({
-    status: apiResponseStatus.Inconsequential,
-    message: "Election status updated successfully",
-  });
+  return okAlias<void>()
+    .Inconsequential()
+    .message("Election status updated successfully")
+    .build();
 }
 
 /** Validates the provided UUID and ensures the associated question or election is not active */
@@ -1038,5 +1162,5 @@ export async function validateEditability(
     });
   }
 
-  return okAlias().Inconsequential().build();
+  return okAlias<void>().Inconsequential().build();
 }
