@@ -177,11 +177,25 @@ export type apiResponse<T> =
       data: T extends void | undefined | null ? never : T;
     };
 
-export type apiType<T> = Promise<Result<apiResponse<T>, apiError>>;
+export type apiType<T> = Promise<
+  Ok<apiResponse<T>, apiError> | Err<never, apiError>
+>;
 
 export type apiErr<T> = Promise<Err<apiResponse<T>, apiError>>;
+export type apiNeverOk = Promise<Err<never, apiError>>;
 
 export type apiOk<T> = Promise<Ok<apiResponse<T>, apiError>>;
+export type apiNeverFail<T> = Promise<Ok<apiResponse<T>, never>>;
+
+export type mkSync<T> = Awaited<T>;
+
+export type syncType<T> = mkSync<apiType<T>>;
+
+export type syncErr<T> = mkSync<apiErr<T>>;
+export type syncNeverOk = mkSync<apiNeverOk>;
+
+export type syncOk<T> = mkSync<apiOk<T>>;
+export type syncNeverFail<T> = mkSync<apiNeverFail<T>>;
 
 export enum databaseInteractionTypes {
   Default = "Default",
@@ -312,33 +326,44 @@ type OkFunctionInput<T> = (
   data?: T;
 };
 
-class OkBuilder<T>
-  implements
-    OkInitialChain<T>,
-    OkStatusChain<T, any>,
-    OkFinalizeChain<T, any, any>
-{
+type OkObjectInput<T> = Partial<apiResponse<T>>;
+
+class OkBuilder<T> {
   private status?: apiResponseStatus;
   private type?: apiResponseTypes;
   private _message?: string;
   private _data?: T;
-  private functionInputProvided: boolean;
+  private inputType: "chain" | "function" | "object";
 
-  constructor(input?: OkFunctionInput<T>) {
-    this.functionInputProvided = input !== undefined;
-
-    // Add all response type methods to this instance
-    for (const type of Object.values(apiResponseTypes)) {
-      const methodName = type.split(".").pop()!;
-      const simpleMethodName =
-        String(type) === String(this.status) ? type : methodName;
-      (this as any)[simpleMethodName] = () => {
-        this.type = type;
-        return this;
-      };
-    }
-
-    if (!this.functionInputProvided) {
+  constructor(input?: OkFunctionInput<T> | OkObjectInput<T>) {
+    if (typeof input === "function") {
+      this.inputType = "function";
+      const result = input(apiResponseStatus, apiResponseTypes);
+      this.status = result.status;
+      this.type = result.type;
+      this._message = result.message;
+      this._data = result.data;
+    } else if (
+      input !== undefined &&
+      typeof input === "object" &&
+      input !== null
+    ) {
+      this.inputType = "object";
+      this.status = input.status;
+      this.type = input.type;
+      this._message = input.message;
+      this._data = input.data;
+    } else {
+      this.inputType = "chain";
+      for (const type of Object.values(apiResponseTypes)) {
+        const methodName = type.split(".").pop()!;
+        const simpleMethodName =
+          String(type) === String(this.status) ? type : methodName;
+        (this as any)[simpleMethodName] = () => {
+          this.type = type;
+          return this;
+        };
+      }
       for (const status of Object.values(apiResponseStatus)) {
         (this as any)[status] = () => {
           this.status = status;
@@ -346,12 +371,6 @@ class OkBuilder<T>
           return this;
         };
       }
-    } else {
-      const result = input!(apiResponseStatus, apiResponseTypes);
-      this.status = result.status;
-      this.type = result.type;
-      this._message = result.message;
-      this._data = result.data;
     }
   }
 
@@ -384,20 +403,20 @@ class OkBuilder<T>
   }
 
   message(msg: string): OkStatusChain<T, any> {
-    if (this.functionInputProvided) {
+    if (this.inputType !== "chain") {
       // TODO: TYPEERROR
       return this as unknown as OkStatusChain<T, any>;
     }
     this._message = msg;
-    return this;
+    return this as unknown as OkStatusChain<T, any>;
   }
 
   data(data: T): OkStatusChain<T, any> {
-    if (this.functionInputProvided) {
-      return this as unknown as OkStatusChain<T,any>;
+    if (this.inputType !== "chain") {
+      return this as unknown as OkStatusChain<T, any>;
     }
     this._data = data;
-    return this as unknown as OkStatusChain<T,any>;
+    return this as unknown as OkStatusChain<T, any>;
   }
 
   build(): Awaited<apiOk<T>> {
@@ -421,7 +440,7 @@ type ErrInitialChain = {
 type ErrStatusChain<Status extends apiErrorStatus> = {
   message(msg: string): ErrStatusChain<Status>;
   error(err: unknown): ErrStatusChain<Status>;
-  build(): Awaited<apiError>;
+  build(): Awaited<apiNeverOk>;
 } & {
   [K in apiErrorTypes as K extends `${Status}.${infer Rest}`
     ? Rest
@@ -439,7 +458,7 @@ interface ErrFinalizeChain<
 > {
   message(msg: string): ErrFinalizeChain<Status, Type>;
   error(err: unknown): ErrFinalizeChain<Status, Type>;
-  build(): Result<any, apiError>; // Synchronous build, returns Result
+  build(): Awaited<apiNeverOk>;
 }
 
 type ErrFunctionInput = (
@@ -452,9 +471,9 @@ type ErrFunctionInput = (
   error?: unknown;
 };
 
-class ErrBuilder
-  implements ErrInitialChain, ErrStatusChain<any>, ErrFinalizeChain<any, any>
-{
+type ErrObjectInput = Partial<apiError>;
+
+class ErrBuilder {
   private status?: apiErrorStatus;
   private type?: apiErrorTypes;
   private _message?: string;
@@ -463,22 +482,26 @@ class ErrBuilder
     reported: false,
     reportable: true,
   };
-  private functionInputProvided: boolean;
+  private inputType: "chain" | "function" | "object";
 
-  constructor(input?: ErrFunctionInput) {
-    this.functionInputProvided = input !== undefined;
-
-    for (const type of Object.values(apiErrorTypes)) {
-      const methodName = type.split(".").pop()!;
-      const simpleMethodName =
-        String(type) === String(this.status) ? type : methodName;
-      (this as any)[simpleMethodName] = () => {
-        this.type = type;
-        return this;
-      };
-    }
-
-    if (!this.functionInputProvided) {
+  constructor(input?: ErrFunctionInput | ErrObjectInput) {
+    if (typeof input === "function") {
+      this.inputType = "function";
+      const result = input(apiErrorStatus, apiErrorTypes);
+      this.status = result.status;
+      this.type = result.type;
+      this._message = result.message;
+      this._error = result.error;
+      this.updateInternal();
+    } else if (input !== undefined) {
+      this.inputType = "object";
+      this.status = input.status;
+      this.type = input.type;
+      this._message = input.message;
+      this._error = input.error;
+      this.updateInternal();
+    } else {
+      this.inputType = "chain";
       for (const status of Object.values(apiErrorStatus)) {
         (this as any)[status] = () => {
           this.status = status;
@@ -487,13 +510,6 @@ class ErrBuilder
           return this;
         };
       }
-    } else {
-      const result = input!(apiErrorStatus, apiErrorTypes);
-      this.status = result.status;
-      this.type = result.type;
-      this._message = result.message;
-      this._error = result.error;
-      this.updateInternal();
     }
   }
 
@@ -519,7 +535,8 @@ class ErrBuilder
 
     for (const type of types) {
       const methodName = type.split(".").pop()!;
-      const simpleMethodName = type === this.status ? type : methodName;
+      const simpleMethodName =
+        String(type) === String(this.status) ? type : methodName;
 
       (this as any)[simpleMethodName] = () => {
         this.type = type;
@@ -530,7 +547,7 @@ class ErrBuilder
   }
 
   message(msg: string): ErrStatusChain<any> {
-    if (this.functionInputProvided) {
+    if (this.inputType !== "chain") {
       // TODO: TYPEERROR
       return this as unknown as ErrStatusChain<any>;
     }
@@ -539,9 +556,9 @@ class ErrBuilder
   }
 
   error(err: unknown): ErrStatusChain<any> {
-    if (this.functionInputProvided) {
+    if (this.inputType !== "chain") {
       // TODO: TYPEERROR
-      return this as unknown as ErrStatusChain<any>>;
+      return this as unknown as ErrStatusChain<any>;
     }
     this._error = err;
     return this as unknown as ErrStatusChain<any>;
@@ -563,29 +580,82 @@ class ErrBuilder
     }
   }
 
-  build(): Result<any, apiError> {
+  build(): Awaited<apiNeverOk> {
     const response = {
       status: this.status,
       type: this.type,
-      message: this.message || "An error occurred",
-      error: this.error,
+      message: this._message ?? "An error occurred",
+      error: this._error ?? null,
       _internal: { ...this._internal, reported: false },
     } as apiError;
 
-    return err(response).mapErr(orReport);
+    return err(response).mapErr(orReport) as Awaited<apiNeverOk>;
   }
 }
 
-/**
- * Simplifies database query operations by handling common error patterns and type checking.
- *
- * This utility function wraps database operations in try-catch logic and provides standardized
- * error handling for database interactions. It expects array results and can check for empty results.
- *
- * @param query The database query to execute
- * @param errorMessage Optional custom error message for NotFound errors
- * @returns A Result containing either the first item from the result array or an apiError
- */
+export function construct<T>() {
+  return {
+    ok: (
+      input?: OkFunctionInput<T> | OkObjectInput<T>,
+    ): Result<apiResponse<T>, apiError> | OkInitialChain<T> => {
+      const builder = new OkBuilder<T>(input);
+      if (
+        typeof input === "function" ||
+        (typeof input === "object" && input !== undefined)
+      ) {
+        return builder.build();
+      }
+      return builder as unknown as OkInitialChain<T>;
+    },
+    err: (
+      input?: ErrFunctionInput | ErrObjectInput,
+    ): Awaited<apiNeverOk> | ErrInitialChain => {
+      const builder = new ErrBuilder(input);
+      if (
+        typeof input === "function" ||
+        (typeof input === "object" && input !== undefined)
+      ) {
+        return builder.build();
+      }
+      return builder as unknown as ErrInitialChain;
+    },
+  };
+}
+
+function okAlias<T>(): OkInitialChain<T>;
+function okAlias<T>(input: OkFunctionInput<T>): syncType<T>;
+function okAlias<T>(input: OkObjectInput<T>): syncType<T>;
+function okAlias<T>(
+  input?: OkFunctionInput<T> | OkObjectInput<T>,
+): syncType<T> | OkInitialChain<T> {
+  if (
+    typeof input === "function" ||
+    (typeof input === "object" && input !== undefined)
+  ) {
+    const builder = new OkBuilder<T>(input);
+    return builder.build();
+  }
+  return construct<T>().ok() as OkInitialChain<T>;
+}
+
+function errAlias(): ErrInitialChain;
+function errAlias(input: ErrFunctionInput): syncNeverOk;
+function errAlias(input: ErrObjectInput): syncNeverOk;
+function errAlias(
+  input?: ErrFunctionInput | ErrObjectInput,
+): syncNeverOk | ErrInitialChain {
+  if (
+    typeof input === "function" ||
+    (typeof input === "object" && input !== undefined)
+  ) {
+    const builder = new ErrBuilder(input);
+    return builder.build();
+  }
+  return construct().err() as ErrInitialChain;
+}
+
+export { okAlias as ok, errAlias as err };
+
 export async function databaseInteraction<T, D extends boolean = true>(
   query: Promise<T[]>,
   deconstructArray = true as D,
@@ -593,21 +663,20 @@ export async function databaseInteraction<T, D extends boolean = true>(
 ): apiType<D extends true ? T : T[]> {
   const { data: resultArray, error: dbError } = await tc(query);
   if (dbError) {
-    return err({
+    return errAlias({
       status: apiErrorStatus.BadRequest,
       type: apiErrorTypes.BadRequestInternalServerError,
       message: "Database operation failed",
       error: dbError,
-    }).mapErr(orReport);
+    });
   }
 
   if (!deconstructArray) {
-    return ok({
-      status: apiResponseStatus.Success,
-      type: apiResponseTypes.Success,
-
+    return okAlias((s, t) => ({
+      status: s.Success,
+      type: t.Success,
       data: resultArray as D extends true ? T : T[],
-    });
+    }));
   }
 
   const result = resultArray?.[0];
@@ -615,52 +684,39 @@ export async function databaseInteraction<T, D extends boolean = true>(
     switch (interactionType) {
       default:
       case databaseInteractionTypes.Default:
-        return err({
+        return errAlias({
           status: apiErrorStatus.NotFound,
           type: apiErrorTypes.NotFound,
           message: "No results found",
         });
       case databaseInteractionTypes.Sequencial:
-        return err({
+        return errAlias({
           status: apiErrorStatus.BadRequest,
           type: apiErrorTypes.BadRequestSequentialOperationFailure,
           message: "Results should Exist but were not found",
-        }).mapErr(orReport);
+        });
     }
   }
 
-  return ok({
-    status: apiResponseStatus.Success,
-    type: apiResponseTypes.Success,
+  return okAlias((s, t) => ({
+    status: s.Success,
+    type: t.Success,
 
     data: resultArray as D extends true ? T : T[],
-  });
+  }));
 }
 
-/**
- * Updates election status fields based on timing and existing state.
- *
- * This function processes an election identified by the provided ID (which could be a question ID, questionId, or election ID).
- * It updates status flags based on current date compared to the scheduled dates:
- * - Sets isActive=true if start date is in the past and the election isn't completed
- * - Clears booth and isScheduled if an election has dates but isn't published
- * - Sets isCompleted=true if end date is in the past
- * - Validates that archived elections have isCompleted=true and aren't active or scheduled
- * - Ensures archiveDate only exists on archived elections
- *
- * @param id - UUID of a question, questionId, or election
- * @returns Result with success or error information
- */
 export async function updateElectionStatus(
   id: z.infer<typeof uuidType>,
 ): apiType<void> {
   const { success, error } = uuidType.safeParse(id);
   if (!success) {
-    return err({
+    return errAlias({
       status: apiErrorStatus.ValidationError,
       type: apiErrorTypes.ValidationErrorZod,
+
       message: "Input is not a valid UUID",
-      validationError: error,
+      error: error,
     });
   }
 
@@ -673,11 +729,11 @@ export async function updateElectionStatus(
   );
 
   if (dbQError) {
-    return err({
-      status: apiErrorStatus.BadRequest,
-      type: apiErrorTypes.BadRequestInternalServerError,
-      message: "Question database query failed",
-    });
+    return errAlias()
+      .BadRequest()
+      .InternalServerError()
+      .message("Question database query failed")
+      .build();
   }
 
   // Get the election ID either from the question or use the provided ID directly
@@ -692,7 +748,7 @@ export async function updateElectionStatus(
   );
   if (dbError) {
     console.error(dbError);
-    return err({
+    return errAlias({
       status: apiErrorStatus.BadRequest,
       type: apiErrorTypes.BadRequestInternalServerError,
       message: "Election database query failed",
@@ -701,7 +757,7 @@ export async function updateElectionStatus(
 
   const election = electionArray?.[0];
   if (!election) {
-    return err({
+    return errAlias({
       status: apiErrorStatus.NotFound,
       type: apiErrorTypes.NotFound,
       message: "Election not found",
@@ -711,7 +767,6 @@ export async function updateElectionStatus(
   const now = new Date();
   const updates: Partial<typeof election> = {};
 
-  // Status logic based on dates and current state
   if (
     election.startDate &&
     new Date(election.startDate) <= now &&
@@ -753,7 +808,7 @@ export async function updateElectionStatus(
 
     if (updateError) {
       console.error(updateError);
-      return err({
+      return errAlias({
         status: apiErrorStatus.BadRequest,
         type: apiErrorTypes.BadRequestInternalServerError,
         message: "Failed to update election status",
@@ -761,7 +816,7 @@ export async function updateElectionStatus(
     }
   }
 
-  return ok({
+  return okAlias({
     status: apiResponseStatus.Inconsequential,
     message: "Election status updated successfully",
   });
@@ -784,18 +839,16 @@ export async function validateEditability(
 ): apiType<void> {
   const { success, error } = uuidType.safeParse(id);
   if (!success) {
-    return err({
+    return errAlias({
       status: apiErrorStatus.ValidationError,
       type: apiErrorTypes.ValidationErrorZod,
       message: "Input is not a valid UUID",
-      validationError: error,
+      error: error,
     });
   }
 
   const uES = await updateElectionStatus(id);
-  if (uES.isErr()) {
-    return err(uES.error);
-  }
+  if (uES.isErr()) return passBack(uES);
 
   let electionId: string = id;
 
@@ -809,12 +862,11 @@ export async function validateEditability(
   );
 
   if (dbQError) {
-    console.error(dbQError);
-    return err({
-      status: apiErrorStatus.BadRequest,
-      type: apiErrorTypes.BadRequestInternalServerError,
-      message: "Question database query failed",
-    });
+    return errAlias()
+      .BadRequest()
+      .InternalServerError()
+      .message("Question database query failed")
+      .build();
   }
 
   // If it's a question ID, use the related election ID
@@ -829,7 +881,7 @@ export async function validateEditability(
 
   if (dbError) {
     console.error(dbError);
-    return err({
+    return errAlias({
       status: apiErrorStatus.BadRequest,
       type: apiErrorTypes.BadRequestInternalServerError,
       message: "Election database query failed",
@@ -838,7 +890,7 @@ export async function validateEditability(
 
   const election = electionArray?.[0];
   if (!election) {
-    return err({
+    return errAlias({
       status: apiErrorStatus.NotFound,
       type: apiErrorTypes.NotFound,
       message: "Election not found",
@@ -852,14 +904,12 @@ export async function validateEditability(
     election.hasResults ||
     election.isArchived
   ) {
-    return err({
+    return errAlias({
       status: apiErrorStatus.Forbidden,
       type: apiErrorTypes.ForbiddenActivityMismatch,
       message: "You cannot edit an active election!!!",
     });
   }
 
-  return ok({
-    status: apiResponseStatus.Inconsequential,
-  });
+  return okAlias().Inconsequential().build();
 }
