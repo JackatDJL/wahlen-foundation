@@ -636,6 +636,7 @@ type ErrStatusChain<Status extends apiErrorStatus> = {
   message(msg: string): ErrStatusChain<Status>;
   error(err: unknown): ErrStatusChain<Status>;
   build(): Awaited<apiNeverOk>; // Always include build on the status chain
+  transaction(): never;
 } & FilteredErrTypeMethods<Status>; // Add filtered type methods
 
 /** Helper type for the final chain of an error response builder */
@@ -646,6 +647,7 @@ interface ErrFinalizeChain<
   message(msg: string): ErrFinalizeChain<Status, Type>;
   error(err: unknown): ErrFinalizeChain<Status, Type>;
   build(): Awaited<apiNeverOk>;
+  transaction(): never;
 }
 
 // -- Input Types --
@@ -711,6 +713,7 @@ class ErrBuilder {
     this.message = this.message.bind(this);
     this.error = this.error.bind(this);
     this.build = this.build.bind(this);
+    this.transaction = this.transaction.bind(this); // Bind the new method
 
     // Remove all previous type methods
     for (const type of Object.values(apiErrorTypes)) {
@@ -804,12 +807,32 @@ class ErrBuilder {
 
     return err(reportedError) as Awaited<apiNeverOk>;
   }
+
+  transaction(): never {
+    if (this.inputType !== "chain") {
+      console.error("Cannot call transaction() on non-chain input");
+    }
+
+    const errorToThrow: apiError = {
+      status: this.status ?? apiErrorStatus.Failed,
+      type: this.type ?? apiErrorTypes.FailedUnknown,
+      message: this._message ?? "An error occurred during transaction",
+      error: this._error ?? null,
+      _internal: { ...this._internal, reported: false },
+    };
+
+    // Report the error before throwing
+    const reportedError = reportError(errorToThrow);
+
+    // Throw the ApiErrorSignal to stop the transaction
+    throw new ApiErrorSignal(reportedError);
+  }
 }
 
 // --- --- Builder Factory --- ---
 
 /** Factory function for creating API response builders */
-export function construct<T>() {
+function constructInternal<T>() {
   return {
     ok: (
       input?: OkFunctionInput<T> | OkObjectInput<T>,
@@ -878,7 +901,7 @@ function okAlias<T>(
     const builder = new OkBuilder<T>(input);
     return builder.build();
   }
-  return construct<T>().ok() as OkInitialChain<T>;
+  return constructInternal<T>().ok() as OkInitialChain<T>;
 }
 
 /** Utility function to create neverthrow objects with api type */
@@ -895,12 +918,23 @@ function errAlias(
     const builder = new ErrBuilder(input);
     return builder.build();
   }
-  return construct().err() as ErrInitialChain;
+  return constructInternal().err() as ErrInitialChain;
 }
 
 export { okAlias as ok, errAlias as err };
 
-// --- --- Database Interactions --- ---
+/** Constructs the API response builders */
+export function construct(): {
+  ok: typeof okAlias;
+  err: typeof errAlias;
+} {
+  return {
+    ok: okAlias,
+    err: errAlias,
+  };
+}
+
+// --- --- Database Interactions // Transactions --- ---
 
 // --- Types ---
 
@@ -911,6 +945,17 @@ export enum databaseInteractionTypes {
   /** Sequential database operation */
   Sequencial = "Sequencial",
 }
+
+class ApiErrorSignal extends Error {
+  public readonly error: apiError;
+  constructor(error: apiError) {
+    super(error.message);
+    this.name = "ApiErrorSignal";
+    this.error = error;
+  }
+}
+
+type TransactionHelper = <R>(apiCall: apiType<R>) => Promise<R>;
 
 // --- Core Functions ---
 
@@ -965,9 +1010,89 @@ export async function databaseInteraction<T, D extends boolean = true>(
   }));
 }
 
+export async function databaseTransaction<T>(
+  generator: (
+    _: TransactionHelper,
+    tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  ) => AsyncGenerator<Promise<unknown>, T | apiType<T> | syncType<T>, unknown>,
+): apiType<T> {
+  try {
+    const transactionResultSync: syncType<T> = await db.transaction(
+      async (tx) => {
+        // Helper bound to this transaction instance
+        const _ = async <R>(apiCall: apiType<R>): Promise<R> => {
+          const result = await apiCall;
+          if (result.isErr()) {
+            throw new ApiErrorSignal(result.error);
+          }
+          return deconstruct(result).content() as R;
+        };
+
+        const gen = generator(_, tx);
+
+        let next: IteratorResult<
+          Promise<unknown>,
+          T | apiType<T> | syncType<T>
+        >;
+        let lastValue: unknown;
+
+        next = await gen.next();
+
+        while (!next.done) {
+          lastValue = await next.value;
+          next = await gen.next(lastValue);
+        }
+
+        const finalGeneratorResult = next.value;
+
+        // Ensure the final result from the generator is a syncType<T> (Result object)
+        if (
+          typeof finalGeneratorResult === "object" &&
+          finalGeneratorResult !== null &&
+          ("isErr" in finalGeneratorResult || "isOk" in finalGeneratorResult)
+        ) {
+          // It's already a Result-like object. Check if it's a Promise (apiType) or direct Result (syncType).
+          if (finalGeneratorResult instanceof Promise) {
+            return await finalGeneratorResult; // Resolve apiType<T> to syncType<T>
+          } else {
+            return finalGeneratorResult as
+              | Err<never, apiError>
+              | Ok<apiResponse<T>, apiError>;
+          }
+        } else {
+          // It's a raw T, convert it to syncType<T>
+          return okAlias((s, t) => ({
+            status: s.Success,
+            type: t.Success,
+            data: finalGeneratorResult as T,
+          })) as Ok<apiResponse<T>, apiError>;
+        }
+      },
+    );
+
+    return Promise.resolve(transactionResultSync);
+  } catch (e) {
+    if (e instanceof ApiErrorSignal) {
+      return err(e.error);
+    }
+    console.error("Unexpected error in databaseTransaction:", e);
+    return errAlias({
+      status: apiErrorStatus.BadRequest,
+      type: apiErrorTypes.BadRequestInternalServerError,
+      message: "An unexpected error occurred during the transaction",
+      error: e,
+    });
+  }
+}
+
 // --- Election Management ---
 
-/** Updates the status of an election based on current date and state */
+/**
+ * Updates the status of an election based on current date and state using a database transaction.
+ *
+ * @param id - The UUID of the election or a related question.
+ * @returns An apiType<void> indicating success or failure.
+ */
 export async function updateElectionStatus(
   id: z.infer<typeof uuidType>,
 ): apiType<void> {
@@ -976,112 +1101,89 @@ export async function updateElectionStatus(
     return errAlias({
       status: apiErrorStatus.ValidationError,
       type: apiErrorTypes.ValidationErrorZod,
-
       message: "Input is not a valid UUID",
       error: error,
     });
   }
 
-  // First try to find a question with the provided id
-  const { data: questionArray, error: dbQError } = await tc(
-    db
-      .select()
-      .from(questions)
-      .where(or(eq(questions.id, id), eq(questions.questionId, id))),
-  );
-
-  if (dbQError) {
-    return errAlias()
-      .BadRequest()
-      .InternalServerError()
-      .message("Question database query failed")
-      .build();
-  }
-
-  // Get the election ID either from the question or use the provided ID directly
-  let electionId = id;
-  if (questionArray[0]) {
-    electionId = questionArray[0].wahlId;
-  }
-
-  // Fetch the election
-  const { data: electionArray, error: dbError } = await tc(
-    db.select().from(wahlen).where(eq(wahlen.id, electionId)),
-  );
-  if (dbError) {
-    console.error(dbError);
-    return errAlias({
-      status: apiErrorStatus.BadRequest,
-      type: apiErrorTypes.BadRequestInternalServerError,
-      message: "Election database query failed",
-    });
-  }
-
-  const election = electionArray?.[0];
-  if (!election) {
-    return errAlias({
-      status: apiErrorStatus.NotFound,
-      type: apiErrorTypes.NotFound,
-      message: "Election not found",
-    });
-  }
-
-  const now = new Date();
-  const updates: Partial<typeof election> = {};
-
-  if (
-    election.startDate &&
-    new Date(election.startDate) <= now &&
-    !election.isCompleted
-  ) {
-    updates.isActive = true;
-  }
-
-  if (election.endDate && new Date(election.endDate) <= now) {
-    updates.isActive = false;
-    updates.isCompleted = true;
-  }
-
-  if ((election.startDate || election.endDate) && !election.isPublished) {
-    updates.startDate = null;
-    updates.endDate = null;
-    updates.isScheduled = false;
-  }
-
-  if (!election.startDate) {
-    updates.isScheduled = false;
-  }
-
-  // Validate archive state
-  if (election.isArchived) {
-    updates.isActive = false;
-    updates.isScheduled = false;
-    updates.isCompleted = true;
-  } else if (election.archiveDate) {
-    // Remove archive date if not archived
-    updates.archiveDate = null;
-  }
-
-  // Only update if there are changes
-  if (Object.keys(updates).length > 0) {
-    const { error: updateError } = await tc(
-      db.update(wahlen).set(updates).where(eq(wahlen.id, electionId)),
+  return databaseTransaction<void>(async function* (_, tx) {
+    const question = await _(
+      databaseInteraction(
+        tx
+          .select()
+          .from(questions)
+          .where(or(eq(questions.id, id), eq(questions.questionId, id))),
+      ),
     );
 
-    if (updateError) {
-      console.error(updateError);
-      return errAlias({
-        status: apiErrorStatus.BadRequest,
-        type: apiErrorTypes.BadRequestInternalServerError,
-        message: "Failed to update election status",
-      });
+    let electionId = id;
+    if (question) {
+      electionId = question.wahlId;
     }
-  }
 
-  return okAlias<void>()
-    .Inconsequential()
-    .message("Election status updated successfully")
-    .build();
+    // Hole die Wahl mit dem _ Helfer
+    const election = await _(
+      databaseInteraction(
+        tx.select().from(wahlen).where(eq(wahlen.id, electionId)),
+      ),
+    );
+
+    if (!election) {
+      errAlias((s, t) => ({
+        status: s.NotFound,
+        type: t.NotFound,
+        message: "Election not found",
+      }));
+    }
+
+    const now = new Date();
+    const updates: Partial<typeof election> = {};
+
+    if (
+      election.startDate &&
+      new Date(election.startDate) <= now &&
+      !election.isCompleted
+    ) {
+      updates.isActive = true;
+    }
+
+    if (election.endDate && new Date(election.endDate) <= now) {
+      updates.isActive = false;
+      updates.isCompleted = true;
+    }
+
+    if ((election.startDate || election.endDate) && !election.isPublished) {
+      updates.startDate = null;
+      updates.endDate = null;
+      updates.isScheduled = false;
+    }
+
+    if (!election.startDate) {
+      updates.isScheduled = false;
+    }
+
+    if (election.isArchived) {
+      updates.isActive = false;
+      updates.isScheduled = false;
+      updates.isCompleted = true;
+    } else if (election.archiveDate) {
+      updates.archiveDate = null;
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await _(
+        databaseInteraction(
+          tx
+            .update(wahlen)
+            .set(updates)
+            .where(eq(wahlen.id, electionId))
+            .returning(),
+        ),
+      );
+    }
+
+    return;
+  });
 }
 
 /** Validates the provided UUID and ensures the associated question or election is not active */
@@ -1098,69 +1200,44 @@ export async function validateEditability(
     });
   }
 
-  const uES = await updateElectionStatus(id);
-  if (uES.isErr()) return passBack(uES);
+  return databaseTransaction<void>(async function* (_, tx) {
+    await _(updateElectionStatus(id));
 
-  let electionId: string = id;
+    let electionId = id;
 
-  // First check if the ID belongs to a question
-  const { data: questionArray, error: dbQError } = await tc(
-    db
-      .select({ wahlId: questions.wahlId })
-      .from(questions)
-      .where(or(eq(questions.id, id), eq(questions.questionId, id)))
-      .limit(1),
-  );
+    const question = await _(
+      databaseInteraction(
+        tx
+          .select({ wahlId: questions.wahlId })
+          .from(questions)
+          .where(or(eq(questions.id, id), eq(questions.questionId, id)))
+          .limit(1),
+      ),
+    );
 
-  if (dbQError) {
-    return errAlias()
-      .BadRequest()
-      .InternalServerError()
-      .message("Question database query failed")
-      .build();
-  }
+    if (question) {
+      electionId = question.wahlId;
+    }
 
-  // If it's a question ID, use the related election ID
-  if (questionArray[0]) {
-    electionId = questionArray[0].wahlId;
-  }
+    const election = await _(
+      databaseInteraction(
+        tx.select().from(wahlen).where(eq(wahlen.id, electionId)).limit(1),
+      ),
+    );
 
-  // Now fetch the election with the determined ID
-  const { data: electionArray, error: dbError } = await tc(
-    db.select().from(wahlen).where(eq(wahlen.id, electionId)).limit(1),
-  );
+    if (
+      election.isActive ||
+      election.isCompleted ||
+      election.hasResults ||
+      election.isArchived
+    ) {
+      return errAlias({
+        status: apiErrorStatus.Forbidden,
+        type: apiErrorTypes.ForbiddenActivityMismatch,
+        message: "You cannot edit an active election!!!",
+      });
+    }
 
-  if (dbError) {
-    console.error(dbError);
-    return errAlias({
-      status: apiErrorStatus.BadRequest,
-      type: apiErrorTypes.BadRequestInternalServerError,
-      message: "Election database query failed",
-    });
-  }
-
-  const election = electionArray?.[0];
-  if (!election) {
-    return errAlias({
-      status: apiErrorStatus.NotFound,
-      type: apiErrorTypes.NotFound,
-      message: "Election not found",
-    });
-  }
-
-  // Check if the election is in an editable state
-  if (
-    election.isActive ||
-    election.isCompleted ||
-    election.hasResults ||
-    election.isArchived
-  ) {
-    return errAlias({
-      status: apiErrorStatus.Forbidden,
-      type: apiErrorTypes.ForbiddenActivityMismatch,
-      message: "You cannot edit an active election!!!",
-    });
-  }
-
-  return okAlias<void>().Inconsequential().build();
+    return okAlias<void>().Inconsequential().build();
+  });
 }
