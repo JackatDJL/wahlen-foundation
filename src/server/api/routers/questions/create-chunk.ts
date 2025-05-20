@@ -7,296 +7,219 @@ import {
   questionMultipleChoice,
   questionTrueFalse,
 } from "~/server/db/schema/questions";
-import { insertableRootQuestion } from "./create";
-import { throwIfActive } from "./delete";
-import { err, ok, type Result } from "neverthrow";
-import { tc } from "~/lib/tryCatch";
+import { createQuestion } from "./create";
+import { err, ok } from "neverthrow";
+import {
+  apiErrorStatus,
+  apiErrorTypes,
+  type apiOk,
+  apiResponseStatus,
+  apiResponseTypes,
+  type apiType,
+  orReport,
+  uuidType,
+} from "../utility";
 
-const createChunkType = z.object({
-  wahlId: z.string().uuid(),
-  data: z.array(
-    z.discriminatedUnion("type", [
-      z.object({
-        type: z.literal("info"),
+const createChunkType = z.array(
+  z.discriminatedUnion("type", [
+    z.object({
+      wahlId: uuidType,
 
-        title: z.string().min(3).max(256),
-        description: z.string().optional(),
-      }),
+      type: z.literal("info"),
 
-      z.object({
-        type: z.literal("true_false"),
+      title: z.string().min(3).max(256),
+      description: z.string().optional(),
+    }),
 
-        title: z.string().min(3).max(256),
-        description: z.string().optional(),
+    z.object({
+      wahlId: uuidType,
 
-        content: z.object({
-          option1: z.object({
-            title: z.string().min(3).max(256),
-            description: z.string().optional(),
+      type: z.literal("true_false"),
 
-            correct: z.boolean().default(false),
-            colour: z.string().optional(),
-          }),
-          option2: z.object({
-            title: z.string().min(3).max(256),
-            description: z.string().optional(),
+      title: z.string().min(3).max(256),
+      description: z.string().optional(),
 
-            correct: z.boolean().default(false),
-            colour: z.string().optional(),
-          }),
+      content: z.object({
+        option1: z.object({
+          title: z.string().min(3).max(256),
+          description: z.string().optional(),
+
+          correct: z.boolean().default(false),
+          colour: z.string().optional(),
+        }),
+        option2: z.object({
+          title: z.string().min(3).max(256),
+          description: z.string().optional(),
+
+          correct: z.boolean().default(false),
+          colour: z.string().optional(),
         }),
       }),
+    }),
 
-      z.object({
-        type: z.literal("multiple_choice"),
+    z.object({
+      wahlId: uuidType,
 
-        title: z.string().min(3).max(256),
-        description: z.string().optional(),
+      type: z.literal("multiple_choice"),
 
-        content: z.array(
-          z.object({
-            title: z.string().min(3).max(256),
-            description: z.string().optional(),
+      title: z.string().min(3).max(256),
+      description: z.string().optional(),
 
-            correct: z.boolean().default(false),
-            colour: z.string().optional(),
-          }),
-        ),
-      }),
-    ]),
-  ),
-});
+      content: z.array(
+        z.object({
+          title: z.string().min(3).max(256),
+          description: z.string().optional(),
 
-type CreateChunkReturnType =
+          correct: z.boolean().default(false),
+          colour: z.string().optional(),
+        }),
+      ),
+    }),
+  ]),
+);
+
+type CreateChunkReturnDataTypes = Awaited<
   | typeof questionInfo.$inferSelect
   | typeof questionTrueFalse.$inferSelect
-  | typeof questionMultipleChoice.$inferSelect;
+  | typeof questionMultipleChoice.$inferSelect
+>;
 
-enum CreateChunkErrorTypes {
-  Failed = "Failed",
-}
+type CreateChunkReturnType = apiOk<CreateChunkReturnDataTypes>;
 
-type CreateChunkError = {
-  type: CreateChunkErrorTypes;
-  message: string;
-};
+type CreateChunkResultTypes = apiType<CreateChunkReturnDataTypes>;
 
 export const chunkProcedure = protectedProcedure
   .input(createChunkType)
-  .mutation(
-    async ({
-      input,
-    }): Promise<Result<CreateChunkReturnType, CreateChunkError>[]> => {
-      await throwIfActive(input.wahlId);
+  .mutation(async ({ input }): apiType<Awaited<CreateChunkReturnType>[]> => {
+    const results: Awaited<CreateChunkResultTypes>[] = [];
 
-      const responses: Result<CreateChunkReturnType, CreateChunkError>[] = [];
+    for (const item of input) {
+      switch (item.type) {
+        case "info": {
+          results.push(
+            await createQuestion({
+              input: item,
+              questionType: "info",
+              buildInsertable: (rootQuestion, input) => {
+                return {
+                  id: rootQuestion.id,
+                  questionId: rootQuestion.questionId,
 
-      for (const chunk of input.data) {
-        switch (chunk.type) {
-          case "info": {
-            const iRQ = await insertableRootQuestion({
-              wahlId: input.wahlId,
-              type: "info",
-            });
-            if (iRQ.isErr()) {
-              responses.push(
-                err({
-                  type: CreateChunkErrorTypes.Failed,
-                  message: "Failed to create question",
+                  title: input.title,
+                  description: input.description,
+
+                  createdAt: new Date(),
+                  updatedAt: new Date(),
+                } as typeof questionInfo.$inferInsert;
+              },
+              table: {
+                insert: (values) => ({
+                  returning: () =>
+                    db.insert(questionInfo).values(values).returning(),
                 }),
-              );
-              continue;
-            }
+              },
+            }),
+          );
+          break;
+        }
 
-            const infoInsertable: typeof questionInfo.$inferInsert = {
-              id: iRQ.value.questionId ?? "",
-              questionId: iRQ.value.id ?? "",
+        case "true_false": {
+          results.push(
+            await createQuestion({
+              input: item,
+              questionType: "true_false",
+              buildInsertable: (rootQuestion, input) => {
+                return {
+                  id: rootQuestion.id,
+                  questionId: rootQuestion.questionId,
 
-              title: chunk.title,
-              description: chunk.description,
+                  title: input.title,
+                  description: input.description,
 
-              createdAt: new Date(),
-              updatedAt: new Date(),
-            };
+                  o1Id: randomUUID(),
+                  o1Title: input.content.option1.title,
+                  o1Description: input.content.option1.description,
+                  o1Correct: input.content.option1.correct,
+                  o1Colour: input.content.option1.colour,
 
-            const { data: infoResponseArray, error: infoResponseError } =
-              await tc(
-                db.insert(questionInfo).values(infoInsertable).returning(),
-              );
-            if (infoResponseError) {
-              responses.push(
-                err({
-                  type: CreateChunkErrorTypes.Failed,
-                  message: "Failed to create question",
+                  o2Id: randomUUID(),
+                  o2Title: input.content.option2.title,
+                  o2Description: input.content.option2.description,
+                  o2Correct: input.content.option2.correct,
+                  o2Colour: input.content.option2.colour,
+
+                  createdAt: new Date(),
+                  updatedAt: new Date(),
+                } as typeof questionTrueFalse.$inferInsert;
+              },
+              table: {
+                insert: (values) => ({
+                  returning: () =>
+                    db.insert(questionTrueFalse).values(values).returning(),
                 }),
-              );
-              continue;
-            }
+              },
+            }),
+          );
+          break;
+        }
 
-            const infoResponse = infoResponseArray
-              ? infoResponseArray[0]
-              : null;
-            if (!infoResponse) {
-              responses.push(
-                err({
-                  type: CreateChunkErrorTypes.Failed,
-                  message: "Failed to create question",
+        case "multiple_choice": {
+          results.push(
+            await createQuestion({
+              input: item,
+              questionType: "multiple_choice",
+              buildInsertable: (rootQuestion, input) => {
+                return {
+                  id: rootQuestion.id,
+                  questionId: rootQuestion.questionId,
+
+                  title: input.title,
+                  description: input.description,
+
+                  content: input.content.map((item) => ({
+                    id: randomUUID(),
+                    title: item.title,
+                    description: item.description,
+                    correct: item.correct,
+                    colour: item.colour,
+                  })),
+
+                  createdAt: new Date(),
+                  updatedAt: new Date(),
+                } as typeof questionMultipleChoice.$inferInsert;
+              },
+              table: {
+                insert: (values) => ({
+                  returning: () =>
+                    db
+                      .insert(questionMultipleChoice)
+                      .values(values)
+                      .returning(),
                 }),
-              );
-              continue;
-            }
-
-            responses.push(ok(infoResponse));
-            break;
-          }
-
-          case "true_false": {
-            const iRQ = await insertableRootQuestion({
-              wahlId: input.wahlId,
-              type: "true_false",
-            });
-            if (iRQ.isErr()) {
-              responses.push(
-                err({
-                  type: CreateChunkErrorTypes.Failed,
-                  message: "Failed to create question",
-                }),
-              );
-              continue;
-            }
-
-            const trueFalseInsertable: typeof questionTrueFalse.$inferInsert = {
-              id: iRQ.value.questionId ?? "",
-              questionId: iRQ.value.id ?? "",
-
-              title: chunk.title,
-              description: chunk.description,
-
-              o1Id: randomUUID(),
-              o1Title: chunk.content.option1.title,
-              o1Description: chunk.content.option1.description,
-              o1Correct: chunk.content.option1.correct,
-              o1Colour: chunk.content.option1.colour,
-
-              o2Id: randomUUID(),
-              o2Title: chunk.content.option2.title,
-              o2Description: chunk.content.option2.description,
-              o2Correct: chunk.content.option2.correct,
-              o2Colour: chunk.content.option2.colour,
-
-              createdAt: new Date(),
-              updatedAt: new Date(),
-            };
-
-            const {
-              data: trueFalseResponseArray,
-              error: trueFalseResponseError,
-            } = await tc(
-              db
-                .insert(questionTrueFalse)
-                .values(trueFalseInsertable)
-                .returning(),
-            );
-            if (trueFalseResponseError) {
-              responses.push(
-                err({
-                  type: CreateChunkErrorTypes.Failed,
-                  message: "Failed to create question",
-                }),
-              );
-              continue;
-            }
-
-            const trueFalseResponse = trueFalseResponseArray
-              ? trueFalseResponseArray[0]
-              : null;
-            if (!trueFalseResponse) {
-              responses.push(
-                err({
-                  type: CreateChunkErrorTypes.Failed,
-                  message: "Failed to create question",
-                }),
-              );
-              continue;
-            }
-
-            responses.push(ok(trueFalseResponse));
-            break;
-          }
-
-          case "multiple_choice": {
-            const iRQ = await insertableRootQuestion({
-              wahlId: input.wahlId,
-              type: "multiple_choice",
-            });
-            if (iRQ.isErr()) {
-              responses.push(
-                err({
-                  type: CreateChunkErrorTypes.Failed,
-                  message: "Failed to create question",
-                }),
-              );
-              continue;
-            }
-
-            const multipleChoiceInsertable: typeof questionMultipleChoice.$inferInsert =
-              {
-                id: iRQ.value.questionId ?? "",
-                questionId: iRQ.value.id ?? "",
-
-                title: chunk.title,
-                description: chunk.description,
-
-                content: chunk.content.map((c) => ({
-                  id: randomUUID(),
-                  title: c.title,
-                  description: c.description,
-                  correct: c.correct,
-                  colour: c.colour,
-                })),
-
-                createdAt: new Date(),
-                updatedAt: new Date(),
-              };
-
-            const {
-              data: multipleChoiceResponseArray,
-              error: multipleChoiceResponseError,
-            } = await tc(
-              db
-                .insert(questionMultipleChoice)
-                .values(multipleChoiceInsertable)
-                .returning(),
-            );
-            if (multipleChoiceResponseError) {
-              responses.push(
-                err({
-                  type: CreateChunkErrorTypes.Failed,
-                  message: "Failed to create question",
-                }),
-              );
-              continue;
-            }
-
-            const multipleChoiceResponse = multipleChoiceResponseArray
-              ? multipleChoiceResponseArray[0]
-              : null;
-            if (!multipleChoiceResponse) {
-              responses.push(
-                err({
-                  type: CreateChunkErrorTypes.Failed,
-                  message: "Failed to create question",
-                }),
-              );
-              continue;
-            }
-
-            responses.push(ok(multipleChoiceResponse));
-            break;
-          }
+              },
+            }),
+          );
+          break;
         }
       }
+    }
 
-      return responses;
-    },
-  );
+    if (results.every((result) => result.isOk())) {
+      return ok({
+        status: apiResponseStatus.Success,
+        type: apiResponseTypes.Success,
+        message: "Questions created successfully",
+        data: results as Awaited<CreateChunkReturnType>[], // No need to filter, all is Ok<T>
+      });
+    } else {
+      const failedCount = results.filter((result) => result.isErr()).length;
+      return err({
+        status: apiErrorStatus.Failed,
+        type: apiErrorTypes.Failed,
+        message: `Failed to create ${failedCount} questions`,
+        error: results
+          .filter((result) => result.isErr())
+          .map((result) => result.error),
+      }).mapErr(orReport);
+    }
+  });
