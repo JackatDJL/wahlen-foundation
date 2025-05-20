@@ -1,6 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-explicit-any */
-// WIP_LINT: DISABLE THIS
 import { or, eq } from "drizzle-orm";
 import { type Err, err, type Ok, ok, type Result } from "neverthrow";
 import { z } from "zod";
@@ -501,7 +498,6 @@ class OkBuilder<T> {
       this.type = result.type;
       this._message = result.message;
       this._data = result.data;
-      // _internal is not set via function input currently
     } else if (
       input !== undefined &&
       typeof input === "object" &&
@@ -515,31 +511,26 @@ class OkBuilder<T> {
       this._internal = input._internal ?? { loggable: false, logged: false };
     } else {
       this.inputType = "chain";
-      // Initial chain methods (status methods) are added by the factory function
     }
   }
 
   // Method to set internal logging state (chainable)
-  _internalLoggable(loggable = true): OkStatusChain<T, any> {
+  _internalLoggable(loggable = true): OkStatusChain<T, apiResponseStatus> {
     if (this.inputType !== "chain") {
-      // This will result in a TypeScript error because _internalLoggable is not on the non-chain types
-      // We can add a runtime check for safety, but the primary enforcement is TS
       console.error("Cannot call _internalLoggable on non-chain input");
-      return this as unknown as OkStatusChain<T, any>; // Explicitly cast to expected type
+      return this as unknown as OkStatusChain<T, apiResponseStatus>;
     }
     this._internal.loggable = loggable;
-    return this as unknown as OkStatusChain<T, any>; // Return 'this' to continue chaining with explicit type
+    return this as unknown as OkStatusChain<T, apiResponseStatus>;
   }
 
   // Method to add chainable type methods based on the selected status
   public addChainableMethods(): void {
-    // Add common chainable methods
     this.message = this.message.bind(this);
     this.data = this.data.bind(this);
     this.build = this.build.bind(this);
-    this._internalLoggable = this._internalLoggable.bind(this); // Add internal logging method
+    this._internalLoggable = this._internalLoggable.bind(this);
 
-    // Remove all previous type methods
     for (const type of Object.values(apiResponseTypes)) {
       const methodName = type.split(".").pop()!;
       const simpleMethodName =
@@ -547,7 +538,6 @@ class OkBuilder<T> {
       delete (this as Record<string, unknown>)[simpleMethodName];
     }
 
-    // Add only the relevant type methods for the current status
     const types = this.status ? (responseMappings[this.status] ?? []) : [];
 
     for (const type of types) {
@@ -555,41 +545,40 @@ class OkBuilder<T> {
       const simpleMethodName =
         String(type) === String(this.status) ? type : methodName;
 
-      // Add the type method
-      (this as any)[simpleMethodName] = () => {
+      (this as Record<string, unknown>)[simpleMethodName] = () => {
         this.type = type;
-        // If type name matches status name, auto-set the type
         if (String(this.type) === String(this.status)) {
           this.type = type;
         }
         return this;
       };
 
-      // If type name matches status name, auto-set the type
       if (String(type) === String(this.status)) {
         this.type = type;
       }
     }
   }
 
-  message(msg: string): OkStatusChain<T, any> {
+  message<Status extends apiResponseStatus>(
+    msg: string,
+  ): OkStatusChain<T, Status> {
     if (this.inputType !== "chain") {
       // This will result in a TypeScript error
       console.error("Cannot call message() on non-chain input");
-      return this as unknown as OkStatusChain<T, any>;
+      return this as unknown as OkStatusChain<T, Status>;
     }
     this._message = msg;
-    return this as unknown as OkStatusChain<T, any>; // Return 'this' to continue chaining with explicit type
+    return this as unknown as OkStatusChain<T, Status>;
   }
 
-  data(data: T): OkStatusChain<T, any> {
+  data<Status extends apiResponseStatus>(data: T): OkStatusChain<T, Status> {
     if (this.inputType !== "chain") {
       // This will result in a TypeScript error
       console.error("Cannot call data() on non-chain input");
-      return this as unknown as OkStatusChain<T, any>; // Return 'this' for runtime compatibility
+      return this as unknown as OkStatusChain<T, Status>;
     }
     this._data = data;
-    return this as unknown as OkStatusChain<T, any>; // Return 'this' to continue chaining with explicit type
+    return this as unknown as OkStatusChain<T, Status>;
   }
 
   build(): Awaited<apiOk<T>> {
@@ -635,9 +624,9 @@ type ErrInitialChain = {
 type ErrStatusChain<Status extends apiErrorStatus> = {
   message(msg: string): ErrStatusChain<Status>;
   error(err: unknown): ErrStatusChain<Status>;
-  build(): Awaited<apiNeverOk>; // Always include build on the status chain
+  build(): syncNeverOk;
   transaction(): never;
-} & FilteredErrTypeMethods<Status>; // Add filtered type methods
+} & FilteredErrTypeMethods<Status>;
 
 /** Helper type for the final chain of an error response builder */
 interface ErrFinalizeChain<
@@ -646,7 +635,7 @@ interface ErrFinalizeChain<
 > {
   message(msg: string): ErrFinalizeChain<Status, Type>;
   error(err: unknown): ErrFinalizeChain<Status, Type>;
-  build(): Awaited<apiNeverOk>;
+  build(): syncNeverOk;
   transaction(): never;
 }
 
@@ -699,23 +688,20 @@ class ErrBuilder {
       this.type = input.type;
       this._message = input.message;
       this._error = input.error;
-      this._internal = input._internal ?? { reported: false, reportable: true }; // Use provided internal or default
-      this.updateInternal(); // Update based on final status/type
+      this._internal = input._internal ?? { reported: false, reportable: true };
+      this.updateInternal();
     } else {
       this.inputType = "chain";
-      // Initial chain methods (status methods) are added by the factory function
     }
   }
 
   // Method to add chainable type methods based on the selected status
   public addChainableMethods(): void {
-    // Add common chainable methods
     this.message = this.message.bind(this);
     this.error = this.error.bind(this);
     this.build = this.build.bind(this);
-    this.transaction = this.transaction.bind(this); // Bind the new method
+    this.transaction = this.transaction.bind(this);
 
-    // Remove all previous type methods
     for (const type of Object.values(apiErrorTypes)) {
       const methodName = type.split(".").pop()!;
       const simpleMethodName =
@@ -730,47 +716,41 @@ class ErrBuilder {
       const simpleMethodName =
         String(type) === String(this.status) ? type : methodName;
 
-      // Add the type method
-      (this as any)[simpleMethodName] = () => {
+      (this as Record<string, unknown>)[simpleMethodName] = () => {
         this.type = type;
         this.updateInternal();
-        // If type name matches status name, auto-set the type
         if (String(this.type) === String(this.status)) {
           this.type = type;
         }
         return this;
       };
 
-      // If type name matches status name, auto-set the type
       if (String(type) === String(this.status)) {
         this.type = type;
-        this.updateInternal(); // Update internal state when type is set
+        this.updateInternal();
       }
     }
   }
 
-  message(msg: string): ErrStatusChain<any> {
+  message<Status extends apiErrorStatus>(msg: string): ErrStatusChain<Status> {
     if (this.inputType !== "chain") {
-      // This will result in a TypeScript error
       console.error("Cannot call message() on non-chain input");
-      return this as unknown as ErrStatusChain<any>; // Return 'this' with explicit type for runtime compatibility
+      return this as unknown as ErrStatusChain<Status>;
     }
     this._message = msg;
-    return this as unknown as ErrStatusChain<any>; // Return 'this' to continue chaining
+    return this as unknown as ErrStatusChain<Status>;
   }
 
-  error(err: unknown): ErrStatusChain<any> {
+  error<Status extends apiErrorStatus>(err: unknown): ErrStatusChain<Status> {
     if (this.inputType !== "chain") {
-      // This will result in a TypeScript error
       console.error("Cannot call error() on non-chain input");
-      return this as unknown as ErrStatusChain<any>; // Return 'this' with explicit type for runtime compatibility
+      return this as unknown as ErrStatusChain<Status>;
     }
     this._error = err;
-    return this as unknown as ErrStatusChain<any>; // Return 'this' to continue chaining
+    return this as unknown as ErrStatusChain<Status>;
   }
 
   private updateInternal(): void {
-    // Default reportable to true unless specifically set otherwise
     this._internal.reportable = true;
 
     if (
@@ -784,28 +764,24 @@ class ErrBuilder {
     ) {
       this._internal.reportable = false;
     }
-    // If status and type are set and don't match the above, reportable remains true
-    // If only status is set, reportable remains true by default
   }
 
-  build(): Awaited<apiNeverOk> {
+  build(): syncNeverOk {
     if (this.inputType !== "chain") {
-      // This will result in a TypeScript error
       console.error("Cannot call build() on non-chain input");
     }
 
     const response: apiError = {
-      status: this.status ?? apiErrorStatus.Failed, // Default status if not set
-      type: this.type ?? apiErrorTypes.FailedUnknown, // Default type if not set
+      status: this.status ?? apiErrorStatus.Failed,
+      type: this.type ?? apiErrorTypes.FailedUnknown,
       message: this._message ?? "An error occurred",
       error: this._error ?? null,
-      _internal: { ...this._internal, reported: false }, // Reset reported state before reporting
+      _internal: { ...this._internal, reported: false },
     };
 
-    // Report the error before returning
     const reportedError = reportError(response);
 
-    return err(reportedError) as Awaited<apiNeverOk>;
+    return err(reportedError) as syncNeverOk;
   }
 
   transaction(): never {
@@ -847,9 +823,9 @@ function constructInternal<T>() {
 
       // Add initial chain methods (status methods) to the builder instance
       for (const status of Object.values(apiResponseStatus)) {
-        (builder as any)[status] = () => {
+        (builder as unknown as Record<string, unknown>)[status] = () => {
           builder.setStatus(status);
-          builder.addChainableMethods(); // Add methods relevant to the selected status
+          builder.addChainableMethods();
           return builder;
         };
       }
@@ -860,7 +836,7 @@ function constructInternal<T>() {
     },
     err: (
       input?: ErrFunctionInput | ErrObjectInput,
-    ): Awaited<apiNeverOk> | ErrInitialChain => {
+    ): syncNeverOk | ErrInitialChain => {
       const builder = new ErrBuilder(input);
       if (
         typeof input === "function" ||
@@ -871,7 +847,7 @@ function constructInternal<T>() {
 
       // Add initial chain methods (status methods) to the builder instance
       for (const status of Object.values(apiErrorStatus)) {
-        (builder as any)[status] = () => {
+        (builder as unknown as Record<string, unknown>)[status] = () => {
           builder.setStatus(status);
           // Use public method to update internal state
           builder.addChainableMethods();
