@@ -5,9 +5,15 @@ import { tc } from "~/lib/tryCatch";
 import { db } from "~/server/db";
 import { questions } from "~/server/db/schema/questions";
 import { wahlen } from "~/server/db/schema/wahlen";
-import { publicProcedure } from "../trpc";
+import { publicProcedure } from "./trpc";
 import posthog from "posthog-js";
 import * as Sentry from "@sentry/nextjs";
+import type {
+  PgUpdateBase,
+  PgInsertBase,
+  PgDeleteBase,
+  PgTable,
+} from "drizzle-orm/pg-core";
 
 // --- --- Utility Types --- ---
 
@@ -96,6 +102,12 @@ export enum apiErrorTypes {
   // Failed types
   /** Generic failure */
   Failed = "Failed",
+  /** Failed upload */
+  FailedUpload = "Failed.Upload",
+  /** Failed download */
+  FailedDownload = "Failed.Download",
+  /** Failed missing data */
+  FailedMissingData = "Failed.MissingData",
   /** Unknown failure */
   FailedUnknown = "Failed.Unknown",
 }
@@ -372,10 +384,10 @@ export function reportResponse<T>(response: apiResponse<T>): apiResponse<T> {
   };
 }
 
-/** Alias for reportError */
+/** Alias for reportError // neverthrow.err({}).mapErr(orReport) */
 export const orReport = reportError;
 
-/** Alias for reportResponse */
+/** Alias for reportResponse // neverthrow.ok({}).map(Log) */
 export const Log = reportResponse;
 
 // --- --- Builder Pattern Implementation --- ---
@@ -407,6 +419,7 @@ function generateTypeMappings<
       }
     }
   }
+  // partial because not all status have types
   return mappings as Partial<
     Record<StatusEnum[keyof StatusEnum], TypesEnum[keyof TypesEnum][]>
   >;
@@ -481,7 +494,7 @@ class OkBuilder<T> {
   protected _message?: string;
   protected _data?: T;
   protected _internal: apiResponse<T>["_internal"] = {
-    loggable: false, // Default to not loggable
+    loggable: false, // Default to not loggable // overwritten in build
     logged: false,
   };
   protected inputType: "chain" | "function" | "object";
@@ -531,6 +544,7 @@ class OkBuilder<T> {
     this.build = this.build.bind(this);
     this._internalLoggable = this._internalLoggable.bind(this);
 
+    // Remove existing type methods to avoid conflicts
     for (const type of Object.values(apiResponseTypes)) {
       const methodName = type.split(".").pop()!;
       const simpleMethodName =
@@ -540,6 +554,7 @@ class OkBuilder<T> {
 
     const types = this.status ? (responseMappings[this.status] ?? []) : [];
 
+    // Add new type methods based on the selected status
     for (const type of types) {
       const methodName = type.split(".").pop()!;
       const simpleMethodName =
@@ -628,15 +643,19 @@ type ErrStatusChain<Status extends apiErrorStatus> = {
   transaction(): never;
 } & FilteredErrTypeMethods<Status>;
 
+/** Transaction Error Type Specification */
+type TransactionFunction = {
+  transaction(): never;
+};
+
 /** Helper type for the final chain of an error response builder */
 interface ErrFinalizeChain<
   Status extends apiErrorStatus,
   Type extends apiErrorTypes,
-> {
+> extends TransactionFunction {
   message(msg: string): ErrFinalizeChain<Status, Type>;
   error(err: unknown): ErrFinalizeChain<Status, Type>;
   build(): syncNeverOk;
-  transaction(): never;
 }
 
 // -- Input Types --
@@ -766,7 +785,7 @@ class ErrBuilder {
     }
   }
 
-  build(): syncNeverOk {
+  build(): syncNeverOk & TransactionFunction {
     if (this.inputType !== "chain") {
       console.error("Cannot call build() on non-chain input");
     }
@@ -781,7 +800,11 @@ class ErrBuilder {
 
     const reportedError = reportError(response);
 
-    return err(reportedError) as syncNeverOk;
+    const errorResult = err(reportedError);
+    // Attach the transaction method to satisfy TransactionFunction
+    (errorResult as Err<never, apiError> & TransactionFunction).transaction =
+      () => this.transaction();
+    return errorResult as syncNeverOk & TransactionFunction;
   }
 
   transaction(): never {
@@ -836,7 +859,7 @@ function constructInternal<T>() {
     },
     err: (
       input?: ErrFunctionInput | ErrObjectInput,
-    ): syncNeverOk | ErrInitialChain => {
+    ): (syncNeverOk & TransactionFunction) | ErrInitialChain => {
       const builder = new ErrBuilder(input);
       if (
         typeof input === "function" ||
@@ -882,11 +905,11 @@ function okAlias<T>(
 
 /** Utility function to create neverthrow objects with api type */
 function errAlias(): ErrInitialChain;
-function errAlias(input: ErrFunctionInput): syncNeverOk;
-function errAlias(input: ErrObjectInput): syncNeverOk;
+function errAlias(input: ErrFunctionInput): syncNeverOk & TransactionFunction;
+function errAlias(input: ErrObjectInput): syncNeverOk & TransactionFunction;
 function errAlias(
   input?: ErrFunctionInput | ErrObjectInput,
-): syncNeverOk | ErrInitialChain {
+): (syncNeverOk & TransactionFunction) | ErrInitialChain {
   if (
     typeof input === "function" ||
     (typeof input === "object" && input !== undefined)
@@ -935,13 +958,116 @@ type TransactionHelper = <R>(apiCall: apiType<R>) => Promise<R>;
 
 // --- Core Functions ---
 
+import {
+  type PgUpdate,
+  type PgInsert,
+  type PgDelete,
+} from "drizzle-orm/pg-core";
+
+/** Type alias for the database instance to avoid circular reference */
+type DBInstance = typeof db;
+
+/**
+ * Type representing the return type of a database update operation.
+ * This covers any db operation that isn't a transaction or a simple query (select()).
+ */
+type UpdateReturnType = Omit<
+  PgUpdate<never, never>,
+  "leftJoin" | "rightJoin" | "fullJoin" | "where"
+>;
+
+/**
+ * Type representing the return type of a database insert operation.
+ * Used for .insert().values().returning().execute()
+ */
+type InsertReturnType = Omit<
+  PgInsert<never, never>,
+  "leftJoin" | "rightJoin" | "fullJoin" | "where"
+>;
+
+/**
+ * Type representing the return type of a database delete operation.
+ * Used for .delete().where().returning().execute()
+ */
+type DeleteReturnType = Omit<
+  PgDelete<never, never>,
+  "leftJoin" | "rightJoin" | "fullJoin" | "where"
+>;
+
+type QueryReturnUnionType =
+  | UpdateReturnType
+  | InsertReturnType
+  | DeleteReturnType;
+
+/** Executes a database query and handles errors */
+async function databaseInteraction<D extends boolean = true>(
+  query: QueryReturnUnionType,
+  deconstructArray?: D,
+  interactionType?: databaseInteractionTypes,
+): apiType<never>;
+
+/** Executes a database query and handles errors */
+async function databaseInteraction<D extends boolean = true>(
+  query: Promise<unknown[]> | ((db: DBInstance) => Promise<unknown[]>),
+  deconstructArray?: D,
+  interactionType?: databaseInteractionTypes,
+): apiType<never>;
+
+/** Executes a database query and handles the response formatting as well as error handling*/
+async function databaseInteraction<T, D extends boolean = true>(
+  query: Promise<T[]> | ((db: DBInstance) => Promise<T[]>),
+  deconstructArray?: D,
+  interactionType?: databaseInteractionTypes,
+): apiType<D extends true ? T : T[]>;
+
 /** Executes a database query and handles the response formatting */
-export async function databaseInteraction<T, D extends boolean = true>(
-  query: Promise<T[]>,
-  deconstructArray = true as D,
+async function databaseInteraction<T, D extends boolean = true>(
+  query:
+    | QueryReturnUnionType
+    | Promise<T[]>
+    | ((
+        db: DBInstance,
+      ) => Promise<T[]> | Promise<(Record<string, unknown> | undefined)[]>),
+  deconstructArray: D = true as D,
   interactionType: databaseInteractionTypes = databaseInteractionTypes.Default,
 ): apiType<D extends true ? T : T[]> {
-  const { data: resultArray, error: dbError } = await tc(query);
+  let promise: Promise<T[] | (Record<string, unknown> | undefined)[]>;
+
+  if (
+    typeof query !== "function" &&
+    typeof (query as QueryReturnUnionType).toSQL === "function"
+  ) {
+    const sql = (query as QueryReturnUnionType).toSQL();
+    const sqlString = sql.sql.toUpperCase();
+
+    if (
+      !sqlString.includes("UPDATE") &&
+      !sqlString.includes("INSERT") &&
+      !sqlString.includes("DELETE")
+    ) {
+      console.error(
+        "Invalid query type. Only UPDATE, INSERT, or DELETE queries are allowed.",
+      );
+      return errAlias((s, t) => ({
+        status: s.BadRequest,
+        type: t.BadRequestUnknown,
+        message:
+          "Invalid query type. Only UPDATE, INSERT, or DELETE queries are allowed.",
+        error: new Error("Invalid query type"),
+      }));
+    }
+    promise = (query as QueryReturnUnionType).execute() as Promise<
+      T[] | (Record<string, unknown> | undefined)[]
+    >;
+  } else if (typeof query === "function") {
+    promise = (await query(db)) as unknown as Promise<
+      T[] | (Record<string, unknown> | undefined)[]
+    >;
+  } else {
+    promise = query;
+  }
+
+  const { data: resultArray, error: dbError } = await tc(promise);
   if (dbError) {
     return errAlias({
       status: apiErrorStatus.BadRequest,
@@ -949,6 +1075,10 @@ export async function databaseInteraction<T, D extends boolean = true>(
       message: "Database operation failed",
       error: dbError,
     });
+  }
+
+  if (!Array.isArray(resultArray)) {
+    return okAlias<never>().Success().NoData().build();
   }
 
   if (!deconstructArray) {
@@ -985,6 +1115,8 @@ export async function databaseInteraction<T, D extends boolean = true>(
     data: resultArray as D extends true ? T : T[],
   }));
 }
+
+export { databaseInteraction };
 
 export async function databaseTransaction<T>(
   generator: (
