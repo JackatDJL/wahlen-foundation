@@ -967,37 +967,10 @@ import {
 /** Type alias for the database instance to avoid circular reference */
 type DBInstance = typeof db;
 
-/**
- * Type representing the return type of a database update operation.
- * This covers any db operation that isn't a transaction or a simple query (select()).
- */
-type UpdateReturnType = Omit<
-  PgUpdate<never, never>,
-  "leftJoin" | "rightJoin" | "fullJoin" | "where"
->;
-
-/**
- * Type representing the return type of a database insert operation.
- * Used for .insert().values().returning().execute()
- */
-type InsertReturnType = Omit<
-  PgInsert<never, never>,
-  "leftJoin" | "rightJoin" | "fullJoin" | "where"
->;
-
-/**
- * Type representing the return type of a database delete operation.
- * Used for .delete().where().returning().execute()
- */
-type DeleteReturnType = Omit<
-  PgDelete<never, never>,
-  "leftJoin" | "rightJoin" | "fullJoin" | "where"
->;
-
 type QueryReturnUnionType =
-  | UpdateReturnType
-  | InsertReturnType
-  | DeleteReturnType;
+  | PgUpdate<never, never>
+  | PgInsert<never, never>
+  | PgDelete<never, never>;
 
 /** Executes a database query and handles errors */
 async function databaseInteraction<D extends boolean = true>(
@@ -1007,13 +980,6 @@ async function databaseInteraction<D extends boolean = true>(
 ): apiType<never>;
 
 /** Executes a database query and handles errors */
-async function databaseInteraction<D extends boolean = true>(
-  query: Promise<unknown[]> | ((db: DBInstance) => Promise<unknown[]>),
-  deconstructArray?: D,
-  interactionType?: databaseInteractionTypes,
-): apiType<never>;
-
-/** Executes a database query and handles the response formatting as well as error handling*/
 async function databaseInteraction<T, D extends boolean = true>(
   query: Promise<T[]> | ((db: DBInstance) => Promise<T[]>),
   deconstructArray?: D,
@@ -1021,6 +987,19 @@ async function databaseInteraction<T, D extends boolean = true>(
 ): apiType<D extends true ? T : T[]>;
 
 /** Executes a database query and handles the response formatting */
+async function databaseInteraction<
+  T extends Record<string, unknown>,
+  D extends boolean = true,
+>(
+  query:
+    | ((
+        db: DBInstance,
+      ) => Promise<T[]> | Promise<(Record<string, unknown> | undefined)[]>)
+    | Promise<T[]>,
+  deconstructArray?: D,
+  interactionType?: databaseInteractionTypes,
+): apiType<D extends true ? T : T[]>;
+
 async function databaseInteraction<T, D extends boolean = true>(
   query:
     | QueryReturnUnionType
@@ -1037,25 +1016,6 @@ async function databaseInteraction<T, D extends boolean = true>(
     typeof query !== "function" &&
     typeof (query as QueryReturnUnionType).toSQL === "function"
   ) {
-    const sql = (query as QueryReturnUnionType).toSQL();
-    const sqlString = sql.sql.toUpperCase();
-
-    if (
-      !sqlString.includes("UPDATE") &&
-      !sqlString.includes("INSERT") &&
-      !sqlString.includes("DELETE")
-    ) {
-      console.error(
-        "Invalid query type. Only UPDATE, INSERT, or DELETE queries are allowed.",
-      );
-      return errAlias((s, t) => ({
-        status: s.BadRequest,
-        type: t.BadRequestUnknown,
-        message:
-          "Invalid query type. Only UPDATE, INSERT, or DELETE queries are allowed.",
-        error: new Error("Invalid query type"),
-      }));
-    }
     promise = (query as QueryReturnUnionType).execute() as Promise<
       T[] | (Record<string, unknown> | undefined)[]
     >;
