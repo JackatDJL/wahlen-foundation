@@ -4,20 +4,24 @@
 import { createUploadthing, type FileRouter } from "uploadthing/next";
 import { UploadThingError } from "uploadthing/server";
 import { api } from "~/trpc/server";
-import type { inferRouterInputs } from "@trpc/server";
+import type { inferRouterInputs, inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "~/server/api/root";
 import { z } from "zod";
 
 type InputData = inferRouterInputs<AppRouter>["files"]["create"];
+type OutputData = inferRouterOutputs<AppRouter>["files"]["create"];
 
 const f = createUploadthing();
 
 import { auth } from "@clerk/nextjs/server";
-import { err, type Result } from "neverthrow";
-import type {
-  createFileError,
-  createFileReturnTypes,
-} from "~/server/api/routers/files";
+import { err, ok, type Result } from "neverthrow";
+import {
+  apiResponseStatus,
+  apiResponseTypes,
+  apiType,
+  deconstruct,
+  orReport,
+} from "~/server/api/routers/utility";
 
 /**
  * Creates a file record by sending the provided input to the API.
@@ -29,29 +33,22 @@ import type {
  * @param input - The file creation parameters.
  * @returns A promise that resolves to a Result containing either the newly created file details or error metadata.
  */
-async function createFile({
-  input,
-}: {
-  input: InputData;
-}): Promise<Result<createFileReturnTypes, createFileError>> {
+async function createFile({ input }: { input: InputData }) {
   // console.log("Request to Server", input);
 
   const response = await api.files.create(input);
-  if (response.isErr()) {
-    return err({
-      type: response.error.type,
-      message: response.error.message,
-    });
-  }
+  if (response.isErr()) return err(response.error);
 
-  console.log(
-    "Server assigned UUID ",
-    response.value.file.id,
-    " to ",
-    response.value.file.ufsKey,
-  );
+  const data = deconstruct(response).data();
 
-  return response;
+  console.log("Server assigned UUID ", data.file.id, " to ", data.file.ufsKey);
+
+  return ok({
+    status: apiResponseStatus.Success,
+    type: apiResponseTypes.Success,
+    message: "File created successfully",
+    data: data,
+  });
 }
 
 // FileRouter for your app, can contain multiple FileRoutes
@@ -100,6 +97,8 @@ export const UploadthingRouter = {
       const response = await createFile({ input: request });
       if (response.isErr()) {
         console.error("Error creating file: ", response.error.message);
+        console.error("Error details: ", response.error);
+        response.mapErr(orReport);
         throw new UploadThingError("Failed to create file");
       }
     }),

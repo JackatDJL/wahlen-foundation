@@ -56,7 +56,7 @@ export const questions = questionSchema.table(
       .references(() => wahlen.id, { onDelete: "cascade" }),
 
     type: questionTypeEnum("type").notNull(),
-    questionId: uuid("question_id"),
+    questionId: uuid("question_id").notNull(),
 
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),

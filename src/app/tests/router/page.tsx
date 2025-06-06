@@ -3,7 +3,6 @@ import {
   getCurrentPath,
   getHeaders,
   getShortname,
-  handleRouting,
 } from "~/server/foundation-router";
 import { RouterTestClient } from "./client";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";

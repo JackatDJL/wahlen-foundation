@@ -1,9 +1,7 @@
-import { err, ok, type Result } from "neverthrow";
+import { err, ok } from "neverthrow";
 import { z } from "zod";
 
 import { protectedProcedure } from "~/server/api/trpc";
-import { throwIfActive, throwIfActiveErrorTypes } from "./delete";
-import { tc } from "~/lib/tryCatch";
 import { db } from "~/server/db";
 import {
   questionInfo,
@@ -14,274 +12,190 @@ import {
 import { eq, or } from "drizzle-orm";
 import { deleteById } from "../files";
 import { deleteRootQuestion } from "./delete";
+import {
+  apiErrorStatus,
+  apiErrorTypes,
+  apiResponseStatus,
+  apiResponseTypes,
+  type apiType,
+  databaseInteraction,
+  deconstruct,
+  orReport,
+  uuidType,
+  validateEditability,
+} from "../utility";
 
-const uuidArrayType = z.array(z.string().uuid());
-
-export enum deleteQuestionErrorTypes { // No inputtypeerror because auto validation
-  NotFound = "NotFound",
-  DeleteFailed = "DeleteFailed",
-  Forbidden = "Forbidden",
-}
-
-type deleteQuestionError = {
-  type: deleteQuestionErrorTypes;
-  message: string;
-};
+const uuidArrayType = z.array(uuidType);
 
 export const deleteChunkProcedure = protectedProcedure
   .input(uuidArrayType)
-  .mutation(async ({ input }): Promise<Result<void, deleteQuestionError>[]> => {
-    const results: Result<void, deleteQuestionError>[] = [];
+  .mutation(async ({ input }): apiType<Awaited<void>[]> => {
+    const results: Awaited<apiType<void>>[] = [];
+
     for (const id of input) {
-      const tIA = await throwIfActive(id);
+      const tIA = await validateEditability(id);
       if (tIA.isErr()) {
-        if (tIA.error.type === throwIfActiveErrorTypes.Active) {
-          results.push(
-            err({
-              type: deleteQuestionErrorTypes.Forbidden,
-              message: "You cannot delete an active election!!!",
-            }),
-          );
-          continue;
-        }
-        results.push(
-          err({
-            type: deleteQuestionErrorTypes.NotFound,
-            message: tIA.error.message,
-          }),
-        );
+        results.push(err(tIA.error));
         continue;
       }
 
-      const { data: questionArray, error: questionError } = await tc(
+      const question = await databaseInteraction(
         db
           .select()
           .from(questions)
           .where(or(eq(questions.id, id), eq(questions.questionId, id))),
       );
-      if (questionError) {
-        results.push(
-          err({
-            type: deleteQuestionErrorTypes.NotFound,
-            message: "Question not found",
-          }),
-        );
+      if (question.isErr()) {
+        results.push(err(question.error));
         continue;
       }
 
-      const question = questionArray ? questionArray[0] : null;
-      if (!question) {
-        results.push(
-          err({
-            type: deleteQuestionErrorTypes.NotFound,
-            message: "Question not found",
-          }),
-        );
-        continue;
-      }
+      const data = deconstruct(question).data();
 
-      switch (question.type) {
-        case "info":
-          const { data: infoRequestArray, error: infoRequestError } = await tc(
+      switch (data.type) {
+        case "info": {
+          const infoRequest = await databaseInteraction(
             db
               .select()
               .from(questionInfo)
-              .where(eq(questionInfo.id, question.questionId!)),
+              .where(eq(questionInfo.id, data.questionId)),
           );
-          if (infoRequestError) {
-            results.push(
-              err({
-                type: deleteQuestionErrorTypes.NotFound,
-                message: "Info question not found",
-              }),
-            );
+          if (infoRequest.isErr()) {
+            results.push(err(infoRequest.error));
             continue;
           }
 
-          const infoRequest = infoRequestArray ? infoRequestArray[0] : null;
-          if (!infoRequest) {
-            results.push(
-              err({
-                type: deleteQuestionErrorTypes.NotFound,
-                message: "Info question not found",
-              }),
-            );
-            continue;
-          }
+          const infoData = deconstruct(infoRequest).data();
 
-          if (infoRequest.image) {
-            const dBId = await deleteById(infoRequest.image);
+          if (infoData.image) {
+            const dBId = await deleteById(infoData.image);
             if (dBId.isErr()) {
-              results.push(
-                err({
-                  type: deleteQuestionErrorTypes.DeleteFailed,
-                  message: "Failed to delete question image",
-                }),
-              );
+              results.push(err(dBId.error));
               continue;
             }
           }
 
-          const { error: infoError } = await tc(
+          const deleteInfo = await databaseInteraction(
             db
               .delete(questionInfo)
-              .where(eq(questionInfo.id, question.questionId!)),
+              .where(eq(questionInfo.id, data.questionId))
+              .returning(),
           );
-          if (infoError) {
-            results.push(
-              err({
-                type: deleteQuestionErrorTypes.DeleteFailed,
-                message: "Failed to delete info question",
-              }),
-            );
+          if (deleteInfo.isErr()) {
+            results.push(err(deleteInfo.error));
             continue;
           }
           break;
-        case "true_false":
-          const { data: trueFalseRequestArray, error: trueFalseRequestError } =
-            await tc(
-              db
-                .select()
-                .from(questionTrueFalse)
-                .where(eq(questionTrueFalse.id, question.questionId!)),
-            );
-          if (trueFalseRequestError) {
-            results.push(
-              err({
-                type: deleteQuestionErrorTypes.NotFound,
-                message: "True/False question not found",
-              }),
-            );
+        }
+        case "true_false": {
+          const trueFalseRequest = await databaseInteraction(
+            db
+              .select()
+              .from(questionTrueFalse)
+              .where(eq(questionTrueFalse.id, data.questionId)),
+          );
+          if (trueFalseRequest.isErr()) {
+            results.push(err(trueFalseRequest.error));
             continue;
           }
 
-          const trueFalseRequest = trueFalseRequestArray
-            ? trueFalseRequestArray[0]
-            : null;
-          if (!trueFalseRequest) {
-            results.push(
-              err({
-                type: deleteQuestionErrorTypes.NotFound,
-                message: "True/False question not found",
-              }),
-            );
-            continue;
-          }
+          const trueFalseData = deconstruct(trueFalseRequest).data();
 
-          const imgDeleteArray = [
-            trueFalseRequest.o1Image,
-            trueFalseRequest.o2Image,
-          ];
+          const imgDeleteArray = [trueFalseData.o1Image, trueFalseData.o2Image];
 
           for (const image of imgDeleteArray) {
             if (image) {
               const dBId = await deleteById(image);
               if (dBId.isErr()) {
-                results.push(
-                  err({
-                    type: deleteQuestionErrorTypes.DeleteFailed,
-                    message: "Failed to delete question image",
-                  }),
-                );
+                results.push(err(dBId.error));
                 continue;
               }
             }
           }
 
-          const { error: trueFalseError } = await tc(
+          const deleteTrueFalse = await databaseInteraction(
             db
               .delete(questionTrueFalse)
-              .where(eq(questionTrueFalse.id, question.questionId!)),
+              .where(eq(questionTrueFalse.id, data.questionId))
+              .returning(),
           );
-          if (trueFalseError) {
-            results.push(
-              err({
-                type: deleteQuestionErrorTypes.DeleteFailed,
-                message: "Failed to delete true/false question",
-              }),
-            );
+          if (deleteTrueFalse.isErr()) {
+            results.push(err(deleteTrueFalse.error));
             continue;
           }
 
           break;
-        case "multiple_choice":
-          const {
-            data: multipleChoiceRequestArray,
-            error: multipleChoiceRequestError,
-          } = await tc(
+        }
+        case "multiple_choice": {
+          const multipleChoiceRequest = await databaseInteraction(
             db
               .select()
               .from(questionMultipleChoice)
-              .where(eq(questionMultipleChoice.id, question.questionId!)),
+              .where(eq(questionMultipleChoice.id, data.questionId)),
           );
-          if (multipleChoiceRequestError) {
-            results.push(
-              err({
-                type: deleteQuestionErrorTypes.NotFound,
-                message: "Multiple choice question not found",
-              }),
-            );
+          if (multipleChoiceRequest.isErr()) {
+            results.push(err(multipleChoiceRequest.error));
             continue;
           }
 
-          const multipleChoiceRequest = multipleChoiceRequestArray
-            ? multipleChoiceRequestArray[0]
-            : null;
-          if (!multipleChoiceRequest?.content) {
-            results.push(
-              err({
-                type: deleteQuestionErrorTypes.NotFound,
-                message: "Multiple choice question not found",
-              }),
-            );
-            continue;
-          }
+          const multipleChoiceData = deconstruct(multipleChoiceRequest).data();
 
-          const requestedImageDeletion = multipleChoiceRequest.content.map(
-            (item) => item.image,
-          );
+          const requestedImageDeletion = multipleChoiceData.content
+            ? multipleChoiceData.content.map((item) => item.image)
+            : [];
           for (const image of requestedImageDeletion) {
             if (image) {
               const dBId = await deleteById(image);
               if (dBId.isErr()) {
-                results.push(
-                  err({
-                    type: deleteQuestionErrorTypes.DeleteFailed,
-                    message: "Failed to delete question image",
-                  }),
-                );
+                results.push(err(dBId.error));
                 continue;
               }
             }
           }
-          const { error: multipleChoiceError } = await tc(
+
+          const deleteMultipleChoice = await databaseInteraction(
             db
               .delete(questionMultipleChoice)
-              .where(eq(questionMultipleChoice.id, question.questionId!)),
+              .where(eq(questionMultipleChoice.id, data.questionId))
+              .returning(),
           );
-          if (multipleChoiceError) {
-            results.push(
-              err({
-                type: deleteQuestionErrorTypes.DeleteFailed,
-                message: "Failed to delete multiple choice question",
-              }),
-            );
+          if (deleteMultipleChoice.isErr()) {
+            results.push(err(deleteMultipleChoice.error));
             continue;
           }
           break;
+        }
       }
-      const dRQ = await deleteRootQuestion(question.questionId!);
+      const dRQ = await deleteRootQuestion(data.questionId);
       if (dRQ.isErr()) {
-        results.push(
-          err({
-            type: deleteQuestionErrorTypes.NotFound,
-            message: "Root question not found",
-          }),
-        );
+        results.push(err(dRQ.error));
         continue;
       }
 
-      results.push(ok());
+      results.push(
+        ok({
+          status: apiResponseStatus.Success,
+          type: apiResponseTypes.SuccessNoData,
+          message: "Question deleted successfully",
+        }),
+      );
     }
-    return results;
+    if (results.every((result) => result.isOk())) {
+      return ok({
+        status: apiResponseStatus.Success,
+        type: apiResponseTypes.Success,
+        message: "Questions deleted successfully",
+        data: results.map((result) => result.value.data),
+      });
+    } else {
+      const failedCount = results.filter((result) => result.isErr()).length;
+      return err({
+        status: apiErrorStatus.Failed,
+        type: apiErrorTypes.Failed,
+        message: `Failed to delete ${failedCount} questions`,
+        error: results
+          .filter((result) => result.isErr())
+          .map((result) => result.error),
+      }).mapErr(orReport);
+    }
   });

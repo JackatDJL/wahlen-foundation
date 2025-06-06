@@ -12,30 +12,17 @@ import { eq, or } from "drizzle-orm";
 import { db } from "~/server/db";
 import { randomUUID } from "crypto";
 import { deleteById } from "../files";
-import { throwIfActive, throwIfActiveErrorTypes } from "./delete";
-import { type Result, err, ok } from "neverthrow";
-import { tc } from "~/lib/tryCatch";
+import { err, ok } from "neverthrow";
+import {
+  apiErrorStatus,
+  apiErrorTypes,
+  databaseInteraction,
+  deconstruct,
+  validateEditability,
+  type apiType,
+} from "../utility";
 
 const uuidType = z.string().uuid();
-
-export enum UpdateDateOnQuestionErrorTypes {
-  NotFound = "NotFound",
-  UpdateFailed = "UpdateFailed",
-  InputTypeError = "InputTypeError",
-}
-type UpdateDateOnQuestionError =
-  | {
-      type: Exclude<
-        UpdateDateOnQuestionErrorTypes,
-        UpdateDateOnQuestionErrorTypes.InputTypeError
-      >;
-      message: string;
-    }
-  | {
-      type: UpdateDateOnQuestionErrorTypes.InputTypeError;
-      message: string;
-      zodError: z.ZodError;
-    };
 
 /**
  * Updates the "updatedAt" timestamp for a question identified by its UUID.
@@ -49,18 +36,19 @@ type UpdateDateOnQuestionError =
  */
 export async function setUpdateDateOnQuestion(
   questionId: z.infer<typeof uuidType>,
-): Promise<Result<typeof questions.$inferSelect, UpdateDateOnQuestionError>> {
+): apiType<typeof questions.$inferSelect> {
   const { success, error } = uuidType.safeParse(questionId);
 
   if (!success) {
     return err({
-      type: UpdateDateOnQuestionErrorTypes.InputTypeError,
+      status: apiErrorStatus.ValidationError,
+      type: apiErrorTypes.ValidationErrorZod,
       message: "Input is not a valid UUID",
       zodError: error,
     });
   }
 
-  const { data: response, error: dberr } = await tc(
+  const response = await databaseInteraction(
     db
       .update(questions)
       .set({
@@ -71,17 +59,9 @@ export async function setUpdateDateOnQuestion(
       )
       .returning(),
   );
+  if (response.isErr()) return err(response.error);
 
-  if (!response?.[0] || dberr) {
-    console.error(dberr);
-
-    return err({
-      type: UpdateDateOnQuestionErrorTypes.UpdateFailed,
-      message: "Failed to update question date",
-    });
-  }
-
-  return ok(response[0]);
+  return ok(deconstruct(response));
 }
 
 const editInfoType = z.object({
@@ -90,17 +70,6 @@ const editInfoType = z.object({
   title: z.string().min(3).max(256),
   description: z.string().optional(),
 });
-
-enum editErrorTypes {
-  NotFound = "NotFound",
-  UpdateFailed = "UpdateFailed",
-  Disallowed = "Disallowed",
-}
-
-type editError = {
-  type: editErrorTypes;
-  message: string;
-};
 
 const editTrueFalseType = z.object({
   id: z.string().uuid(),
@@ -168,104 +137,40 @@ export const editRouter = createTRPCRouter({
   chunk: editChunkProcedure,
   info: protectedProcedure
     .input(editInfoType)
-    .mutation(
-      async ({
-        input,
-      }): Promise<Result<typeof questionInfo.$inferSelect, editError>> => {
-        const tIA = await throwIfActive(input.id);
-        if (tIA.isErr()) {
-          if (tIA.error.type === throwIfActiveErrorTypes.Active) {
-            return err({
-              type: editErrorTypes.Disallowed,
-              message: "Cannot edit question while active",
-            });
-          } else if (tIA.error.type === throwIfActiveErrorTypes.NotFound) {
-            return err({
-              type: editErrorTypes.NotFound,
-              message: "Question not found",
-            });
-          } else {
-            return err({
-              type: editErrorTypes.UpdateFailed,
-              message: "Failed to update question",
-            });
-          }
-        }
+    .mutation(async ({ input }): apiType<typeof questionInfo.$inferSelect> => {
+      const tIA = await validateEditability(input.id);
+      if (tIA.isErr()) return err(tIA.error);
 
-        const sUDOQ = await setUpdateDateOnQuestion(input.id);
-        if (sUDOQ.isErr()) {
-          return err({
-            type: editErrorTypes.UpdateFailed,
-            message: "Failed to update question",
-          });
-        }
+      const sUDOQ = await setUpdateDateOnQuestion(input.id);
+      if (sUDOQ.isErr()) return err(sUDOQ.error);
 
-        const { data: responseArray, error: responseArrayError } = await tc(
-          db
-            .update(questionInfo)
-            .set({
-              title: input.title,
-              description: input.description,
+      const response = await databaseInteraction(
+        db
+          .update(questionInfo)
+          .set({
+            title: input.title,
+            description: input.description,
 
-              updatedAt: new Date(),
-            })
-            .where(eq(questionInfo.id, input.id))
-            .returning(),
-        );
-        if (responseArrayError) {
-          console.error(responseArrayError);
-          return err({
-            type: editErrorTypes.UpdateFailed,
-            message: "Failed to update question",
-          });
-        }
+            updatedAt: new Date(),
+          })
+          .where(eq(questionInfo.id, input.id))
+          .returning(),
+      );
+      if (response.isErr()) return err(response.error);
 
-        const response = responseArray ? responseArray[0] : null;
-        if (!response) {
-          return err({
-            type: editErrorTypes.UpdateFailed,
-            message: "Failed to update question",
-          });
-        }
-
-        return ok(response);
-      },
-    ),
+      return ok(deconstruct(response));
+    }),
   true_false: protectedProcedure
     .input(editTrueFalseType)
     .mutation(
-      async ({
-        input,
-      }): Promise<Result<typeof questionTrueFalse.$inferSelect, editError>> => {
-        const tIA = await throwIfActive(input.id);
-        if (tIA.isErr()) {
-          if (tIA.error.type === throwIfActiveErrorTypes.Active) {
-            return err({
-              type: editErrorTypes.Disallowed,
-              message: "Cannot edit question while active",
-            });
-          } else if (tIA.error.type === throwIfActiveErrorTypes.NotFound) {
-            return err({
-              type: editErrorTypes.NotFound,
-              message: "Question not found",
-            });
-          } else {
-            return err({
-              type: editErrorTypes.UpdateFailed,
-              message: "Failed to update question",
-            });
-          }
-        }
+      async ({ input }): apiType<typeof questionTrueFalse.$inferSelect> => {
+        const tIA = await validateEditability(input.id);
+        if (tIA.isErr()) return err(tIA.error);
 
         const sUDOQ = await setUpdateDateOnQuestion(input.id);
-        if (sUDOQ.isErr()) {
-          return err({
-            type: editErrorTypes.UpdateFailed,
-            message: "Failed to update question",
-          });
-        }
+        if (sUDOQ.isErr()) return err(sUDOQ.error);
 
-        const { data: responseArray, error: responseArrayError } = await tc(
+        const response = await databaseInteraction(
           db
             .update(questionTrueFalse)
             .set({
@@ -287,23 +192,9 @@ export const editRouter = createTRPCRouter({
             .where(eq(questionTrueFalse.id, input.id))
             .returning(),
         );
-        if (responseArrayError) {
-          console.error(responseArrayError);
-          return err({
-            type: editErrorTypes.UpdateFailed,
-            message: "Failed to update question",
-          });
-        }
+        if (response.isErr()) return err(response.error);
 
-        const response = responseArray ? responseArray[0] : null;
-        if (!response) {
-          return err({
-            type: editErrorTypes.UpdateFailed,
-            message: "Failed to update question",
-          });
-        }
-
-        return ok(response);
+        return ok(deconstruct(response));
       },
     ),
   multiple_choice: protectedProcedure
@@ -311,58 +202,22 @@ export const editRouter = createTRPCRouter({
     .mutation(
       async ({
         input,
-      }): Promise<
-        Result<typeof questionMultipleChoice.$inferSelect, editError>
-      > => {
-        const tIA = await throwIfActive(input.id);
-        if (tIA.isErr()) {
-          if (tIA.error.type === throwIfActiveErrorTypes.Active) {
-            return err({
-              type: editErrorTypes.Disallowed,
-              message: "Cannot edit question while active",
-            });
-          } else if (tIA.error.type === throwIfActiveErrorTypes.NotFound) {
-            return err({
-              type: editErrorTypes.NotFound,
-              message: "Question not found",
-            });
-          } else {
-            return err({
-              type: editErrorTypes.UpdateFailed,
-              message: "Failed to update question",
-            });
-          }
-        }
+      }): apiType<typeof questionMultipleChoice.$inferSelect> => {
+        const tIA = await validateEditability(input.id);
+        if (tIA.isErr()) return err(tIA.error);
 
         const sUDOQ = await setUpdateDateOnQuestion(input.id);
-        if (sUDOQ.isErr()) {
-          return err({
-            type: editErrorTypes.UpdateFailed,
-            message: "Failed to update question",
-          });
-        }
+        if (sUDOQ.isErr()) return err(sUDOQ.error);
 
-        const { data: contentArray, error: contentArrayError } = await tc(
+        const data = await databaseInteraction(
           db
             .select()
             .from(questionMultipleChoice)
             .where(eq(questionMultipleChoice.id, input.id)),
         );
-        if (contentArrayError) {
-          console.error(contentArrayError);
-          return err({
-            type: editErrorTypes.UpdateFailed,
-            message: "Failed to update question",
-          });
-        }
+        if (data.isErr()) return err(data.error);
 
-        let content = contentArray ? contentArray[0]?.content : null;
-        if (!content) {
-          return err({
-            type: editErrorTypes.NotFound,
-            message: "Content not found",
-          });
-        }
+        let content = deconstruct(data).data().content ?? [];
 
         const { addRequest, editRequest, deleteRequest } =
           input.content.reduce<{
@@ -393,12 +248,7 @@ export const editRouter = createTRPCRouter({
           const target = content.find((c) => c.id === item.id);
           if (target?.image) {
             const dBId = await deleteById(target.image);
-            if (dBId.isErr()) {
-              return err({
-                type: editErrorTypes.UpdateFailed,
-                message: "Failed to delete image for multiple_choice question",
-              });
-            }
+            if (dBId.isErr()) return err(dBId.error);
           }
           content = content.filter((c) => c.id !== item.id);
         }
@@ -428,7 +278,7 @@ export const editRouter = createTRPCRouter({
           });
         }
 
-        const { data: responseArray, error: responseArrayError } = await tc(
+        const response = await databaseInteraction(
           db
             .update(questionMultipleChoice)
             .set({
@@ -441,23 +291,9 @@ export const editRouter = createTRPCRouter({
             .where(eq(questionMultipleChoice.id, input.id))
             .returning(),
         );
-        if (responseArrayError) {
-          console.error(responseArrayError);
-          return err({
-            type: editErrorTypes.UpdateFailed,
-            message: "Failed to update question",
-          });
-        }
+        if (response.isErr()) return err(response.error);
 
-        const response = responseArray ? responseArray[0] : null;
-        if (!response) {
-          return err({
-            type: editErrorTypes.UpdateFailed,
-            message: "Failed to update question",
-          });
-        }
-
-        return ok(response);
+        return ok(deconstruct(response));
       },
     ),
 });
