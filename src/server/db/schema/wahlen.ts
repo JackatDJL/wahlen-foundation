@@ -5,6 +5,7 @@ import {
   varchar,
   index,
   pgSchema,
+  boolean,
 } from "drizzle-orm/pg-core";
 
 import { desc, relations } from "drizzle-orm";
@@ -16,27 +17,6 @@ import { eligible, stimmen, sessions } from "./election";
 export const wahlenSchema = pgSchema("wahlen");
 
 // -----------------  Enumerators  -----------------
-
-/**
- * Election Status Types
- *
- * - draft: Election is Drafted and Private
- * - queued: Election is Public and has a Startdate
- * - active: Election is Live
- * - inactive: Election is Inactive
- * - completed: Election is Completed
- * - results: Election Results are Published
- * - archived: Election is Archived
- */
-export const statusTypeEnum = wahlenSchema.enum("status-type", [
-  "draft",
-  "queued",
-  "active",
-  "inactive",
-  "completed",
-  "results",
-  "archived",
-]);
 
 /**
  * Election Homepage Alert Types
@@ -85,7 +65,13 @@ export const wahlen = wahlenSchema.table(
   {
     id: uuid("id").primaryKey().defaultRandom().unique(),
     shortname: varchar("shortname", { length: 25 }).notNull().unique(),
-    status: statusTypeEnum("status").default("draft").notNull(),
+
+    isActive: boolean("is_active").default(false).notNull(),
+    isPublished: boolean("is_published").default(false).notNull(),
+    isScheduled: boolean("is_scheduled").default(false).notNull(),
+    isCompleted: boolean("is_completed").default(false).notNull(),
+    hasResults: boolean("has_results").default(false).notNull(),
+    isArchived: boolean("is_archived").default(false).notNull(),
 
     alert: alertTypeEnum("alert"),
     alertMessage: text("alert_message"),

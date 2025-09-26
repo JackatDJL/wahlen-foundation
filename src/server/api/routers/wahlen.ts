@@ -10,17 +10,14 @@ import {
 import { wahlen } from "~/server/db/schema/wahlen";
 import { randomUUID } from "crypto";
 import { eq } from "drizzle-orm";
-import { type Result, err, ok } from "neverthrow";
-import { tc } from "~/lib/tryCatch";
+import { err, ok } from "neverthrow";
 import {
-  apiDetailedErrorType,
-  apiErrorTypes,
-  apiResponseDetailedTypes,
   apiResponseTypes,
-  apiType,
+  apiResponseStatus,
+  type apiType,
   blankPlaceholdingCallableProcedure,
   databaseInteractionTypes,
-  handleDatabaseInteraction,
+  databaseInteraction,
   identifyingInputType,
   validateEditability,
 } from "./utility";
@@ -55,10 +52,6 @@ const getByShortnameType = z.object({
   shortname: z.string().min(3).max(25),
 });
 
-const generateResultsType = z.string().uuid();
-
-const getResultsType = z.string().uuid();
-
 export const wahlenRouter = createTRPCRouter({
   draft: protectedProcedure
     .input(draftWahlType)
@@ -73,7 +66,7 @@ export const wahlenRouter = createTRPCRouter({
         owner: input.owner,
       };
 
-      const response = await handleDatabaseInteraction(
+      const response = await databaseInteraction(
         db.insert(wahlen).values(insertable).returning(),
         true,
         databaseInteractionTypes.Sequencial,
@@ -83,8 +76,8 @@ export const wahlenRouter = createTRPCRouter({
       }
 
       return ok({
+        status: apiResponseStatus.Success,
         type: apiResponseTypes.Success,
-        detailedType: apiResponseDetailedTypes.Success,
 
         data: response.value.data!,
       });
@@ -97,7 +90,7 @@ export const wahlenRouter = createTRPCRouter({
         return err(vE.error);
       }
 
-      const response = await handleDatabaseInteraction(
+      const response = await databaseInteraction(
         db
           .update(wahlen)
           .set({
@@ -121,7 +114,7 @@ export const wahlenRouter = createTRPCRouter({
       }
 
       return ok({
-        type: apiResponseTypes.Success,
+        status: apiResponseStatus.Success,
 
         data: response.value.data!,
       });
@@ -135,7 +128,7 @@ export const wahlenRouter = createTRPCRouter({
         return err(vE.error);
       }
 
-      const response = await handleDatabaseInteraction(
+      const response = await databaseInteraction(
         db
           .update(wahlen)
           .set({
@@ -155,7 +148,7 @@ export const wahlenRouter = createTRPCRouter({
       }
 
       return ok({
-        type: apiResponseTypes.Success,
+        status: apiResponseStatus.Success,
 
         data: response.value.data!,
       });
@@ -169,7 +162,7 @@ export const wahlenRouter = createTRPCRouter({
         return err(vE.error);
       }
 
-      const response = await handleDatabaseInteraction(
+      const response = await databaseInteraction(
         db
           .update(wahlen)
           .set({
@@ -189,7 +182,7 @@ export const wahlenRouter = createTRPCRouter({
       }
 
       return ok({
-        type: apiResponseTypes.Success,
+        status: apiResponseStatus.Success,
 
         data: response.value.data!,
       });
@@ -203,7 +196,7 @@ export const wahlenRouter = createTRPCRouter({
         return err(vE.error);
       }
 
-      const response = await handleDatabaseInteraction(
+      const response = await databaseInteraction(
         db
           .update(wahlen)
           .set({
@@ -222,7 +215,7 @@ export const wahlenRouter = createTRPCRouter({
       }
 
       return ok({
-        type: apiResponseTypes.Success,
+        status: apiResponseStatus.Success,
 
         data: response.value.data!,
       });
@@ -236,7 +229,7 @@ export const wahlenRouter = createTRPCRouter({
         return err(vE.error);
       }
 
-      const response = await handleDatabaseInteraction(
+      const response = await databaseInteraction(
         db
           .update(wahlen)
           .set({
@@ -255,7 +248,7 @@ export const wahlenRouter = createTRPCRouter({
       }
 
       return ok({
-        type: apiResponseTypes.Success,
+        status: apiResponseStatus.Success,
 
         data: response.value.data!,
       });
@@ -269,7 +262,7 @@ export const wahlenRouter = createTRPCRouter({
         return err(vE.error);
       }
 
-      const response = await handleDatabaseInteraction(
+      const response = await databaseInteraction(
         db
           .update(wahlen)
           .set({
@@ -287,7 +280,7 @@ export const wahlenRouter = createTRPCRouter({
       }
 
       return ok({
-        type: apiResponseTypes.Success,
+        status: apiResponseStatus.Success,
 
         data: response.value.data!,
       });
@@ -301,7 +294,7 @@ export const wahlenRouter = createTRPCRouter({
         return err(vE.error);
       }
 
-      const response = await handleDatabaseInteraction(
+      const response = await databaseInteraction(
         db
           .update(wahlen)
           .set({
@@ -319,7 +312,7 @@ export const wahlenRouter = createTRPCRouter({
       }
 
       return ok({
-        type: apiResponseTypes.Success,
+        status: apiResponseStatus.Success,
 
         data: response.value.data!,
       });
@@ -331,7 +324,7 @@ export const wahlenRouter = createTRPCRouter({
     byId: publicProcedure
       .input(identifyingInputType)
       .query(async ({ input }): apiType<typeof wahlen.$inferSelect> => {
-        const response = await handleDatabaseInteraction(
+        const response = await databaseInteraction(
           db.select().from(wahlen).where(eq(wahlen.id, input.id)),
           true,
         );
@@ -340,7 +333,7 @@ export const wahlenRouter = createTRPCRouter({
         }
 
         return ok({
-          type: apiResponseTypes.Success,
+          status: apiResponseStatus.Success,
 
           data: response.value.data!,
         });
@@ -349,7 +342,7 @@ export const wahlenRouter = createTRPCRouter({
     byShortname: publicProcedure
       .input(getByShortnameType)
       .query(async ({ input }): apiType<typeof wahlen.$inferSelect> => {
-        const response = await handleDatabaseInteraction(
+        const response = await databaseInteraction(
           db.select().from(wahlen).where(eq(wahlen.shortname, input.shortname)),
           true,
         );
@@ -358,7 +351,7 @@ export const wahlenRouter = createTRPCRouter({
         }
 
         return ok({
-          type: apiResponseTypes.Success,
+          status: apiResponseStatus.Success,
 
           data: response.value.data!,
         });
